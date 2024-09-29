@@ -1,6 +1,7 @@
 use super::allocator::Allocator;
 use super::constants::{BLOCK_CAPACITY, BLOCK_SIZE};
 use std::alloc::Layout;
+use std::num::NonZero;
 
 #[test]
 fn hello_alloc() {
@@ -63,7 +64,7 @@ fn refresh_arena() {
         allocator.alloc(layout).unwrap();
     }
     assert!(allocator.get_size() > 10 * BLOCK_SIZE);
-    allocator.sweep(1);
+    allocator.sweep(NonZero::new(1).unwrap());
     assert_eq!(allocator.get_size(), BLOCK_SIZE);
 }
 

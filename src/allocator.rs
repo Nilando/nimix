@@ -1,9 +1,9 @@
-use crate::constants::FREE_MARK;
 use super::alloc_head::AllocHead;
 use super::block_meta::BlockMeta;
 use super::block_store::BlockStore;
 use super::error::AllocError;
 use super::size_class::SizeClass;
+use std::num::NonZero;
 use std::alloc::Layout;
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::Arc;
@@ -30,15 +30,11 @@ impl Allocator {
         Ok(ptr as *mut u8)
     }
 
-    pub fn mark(ptr: *mut u8, layout: Layout, mark: u8) -> Result<(), AllocError> {
-        if mark == FREE_MARK {
-            panic!("passed free mark to sweep");
-        }
-
+    pub fn mark(ptr: *mut u8, layout: Layout, mark: NonZero<u8>) -> Result<(), AllocError> {
         if SizeClass::get_for_size(layout.size())? != SizeClass::Large {
             let meta = BlockMeta::from_ptr(ptr);
 
-            meta.mark(ptr, layout.size() as u32, mark);
+            meta.mark(ptr, layout.size() as u32, mark.into());
         } else {
             let header_layout = Layout::new::<AllocMark>();
             let (_alloc_layout, obj_offset) = header_layout
@@ -46,22 +42,18 @@ impl Allocator {
                 .expect("todo: turn this into an alloc error");
             let block_ptr: &AtomicU8 = unsafe { &*ptr.sub(obj_offset).cast() };
 
-            block_ptr.store(mark, Ordering::SeqCst)
+            block_ptr.store(mark.into(), Ordering::SeqCst)
         }
 
         Ok(())
     }
 
-    pub fn sweep(&self, mark: u8) {
-        if mark == FREE_MARK {
-            panic!("passed free mark to sweep");
-        }
-
-        self.head.sweep(mark as u8);
+    pub fn sweep(&self, mark: NonZero<u8>) {
+        self.head.sweep(mark.into());
     }
 
-    pub fn is_sweeping(&self) -> bool {
-        self.head.is_sweeping()
+    pub fn wait_for_sweep(&self) {
+        self.head.wait_for_sweep()
     }
 
     pub fn get_size(&self) -> usize {

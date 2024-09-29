@@ -3,6 +3,7 @@ use super::constants::{
 };
 use super::size_class::SizeClass;
 use std::sync::atomic::{AtomicU8, Ordering};
+use std::num::NonZero;
 
 pub struct BlockMeta {
     lines: *const [AtomicU8; LINE_COUNT],
@@ -258,7 +259,7 @@ mod tests {
         let medium = Layout::new::<[u8; 512]>();
         let ptr: *mut u8 = alloc.alloc(medium).unwrap();
 
-        Allocator::mark(ptr, medium, 1);
+        Allocator::mark(ptr, medium, NonZero::new(1).unwrap());
 
         let meta = BlockMeta::from_ptr(ptr);
         assert_eq!(meta.get_block(), 1);

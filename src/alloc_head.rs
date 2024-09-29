@@ -140,8 +140,8 @@ impl AllocHead {
         self.block_store.sweep(live_mark);
     }
 
-    pub fn is_sweeping(&self) -> bool {
-        self.block_store.is_sweeping()
+    pub fn wait_for_sweep(&self) {
+        self.block_store.wait_for_sweep()
     }
 }
 

@@ -53,11 +53,6 @@ impl BlockStore {
         }
     }
 
-    fn new_block(&self) -> Result<BumpBlock, AllocError> {
-        self.block_count.fetch_add(1, Ordering::SeqCst);
-        BumpBlock::new()
-    }
-
     pub fn block_count(&self) -> usize {
         self.block_count.load(Ordering::Relaxed)
     }
@@ -84,16 +79,20 @@ impl BlockStore {
         Ok(ptr)
     }
 
-    pub fn is_sweeping(&self) -> bool {
-        self.sweep_lock.try_lock().is_err()
+    pub fn wait_for_sweep(&self) {
+        self.sweep_lock.lock().unwrap();
     }
 
+    // takes a callback that it called once the sweep 
+    // has begun
     pub fn sweep(&self, mark: u8) {
-        let _sweep_lock = self.sweep_lock.lock();
+        let sweep_lock = self.sweep_lock.lock();
         let mut free = self.free.lock().unwrap();
         let mut rest = self.rest.lock().unwrap();
         let mut large = self.large.lock().unwrap();
         let mut recycle = self.recycle.lock().unwrap();
+        drop(sweep_lock);
+
         let mut new_rest = vec![];
         let mut new_recycle = vec![];
         let mut new_large = vec![];
@@ -143,5 +142,10 @@ impl BlockStore {
             self.block_count.fetch_sub(1, Ordering::Relaxed);
             free.pop();
         }
+    }
+
+    fn new_block(&self) -> Result<BumpBlock, AllocError> {
+        self.block_count.fetch_add(1, Ordering::SeqCst);
+        BumpBlock::new()
     }
 }
