@@ -49,9 +49,7 @@ impl Allocator {
     }
 
     // callback is called once the sweep is initialized
-    pub fn sweep<F>(&self, mark: NonZero<u8>, cb: F) 
-    where
-        F: FnOnce()
+    pub fn sweep<F: FnOnce()>(&self, mark: NonZero<u8>, cb: F) 
     {
         self.head.sweep(mark.into(), cb);
     }
