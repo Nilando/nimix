@@ -48,12 +48,12 @@ impl Allocator {
         Ok(())
     }
 
-    pub fn sweep(&self, mark: NonZero<u8>) {
-        self.head.sweep(mark.into());
-    }
-
-    pub fn wait_for_sweep(&self) {
-        self.head.wait_for_sweep()
+    // callback is called once the sweep is initialized
+    pub fn sweep<F>(&self, mark: NonZero<u8>, cb: F) 
+    where
+        F: FnOnce()
+    {
+        self.head.sweep(mark.into(), cb);
     }
 
     pub fn get_size(&self) -> usize {

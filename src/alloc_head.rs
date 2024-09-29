@@ -6,6 +6,7 @@ use super::size_class::SizeClass;
 use std::alloc::Layout;
 use std::cell::Cell;
 use std::sync::Arc;
+use std::num::NonZero;
 
 pub struct AllocHead {
     head: Cell<Option<BumpBlock>>,
@@ -136,12 +137,11 @@ impl AllocHead {
         block_space + large_space
     }
 
-    pub fn sweep(&self, live_mark: u8) {
-        self.block_store.sweep(live_mark);
-    }
-
-    pub fn wait_for_sweep(&self) {
-        self.block_store.wait_for_sweep()
+    pub fn sweep<F>(&self, mark: NonZero<u8>, cb: F) 
+    where
+        F: FnOnce()
+    {
+        self.block_store.sweep(mark, cb);
     }
 }
 

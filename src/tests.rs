@@ -64,7 +64,7 @@ fn refresh_arena() {
         allocator.alloc(layout).unwrap();
     }
     assert!(allocator.get_size() > 10 * BLOCK_SIZE);
-    allocator.sweep(NonZero::new(1).unwrap());
+    allocator.sweep(NonZero::new(1).unwrap(), || {});
     assert_eq!(allocator.get_size(), BLOCK_SIZE);
 }
 

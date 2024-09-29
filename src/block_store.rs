@@ -5,6 +5,7 @@ use super::error::AllocError;
 use std::alloc::Layout;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
+use std::num::NonZero;
 
 pub struct BlockStore {
     block_count: AtomicUsize,
@@ -85,13 +86,17 @@ impl BlockStore {
 
     // takes a callback that it called once the sweep 
     // has begun
-    pub fn sweep(&self, mark: u8) {
-        let sweep_lock = self.sweep_lock.lock();
+    pub fn sweep<F>(&self, mark: NonZero<u8>, cb: F) 
+    where
+        F: FnOnce()
+    {
         let mut free = self.free.lock().unwrap();
         let mut rest = self.rest.lock().unwrap();
         let mut large = self.large.lock().unwrap();
         let mut recycle = self.recycle.lock().unwrap();
-        drop(sweep_lock);
+        let mark: u8 = mark.into();
+
+        cb();
 
         let mut new_rest = vec![];
         let mut new_recycle = vec![];
