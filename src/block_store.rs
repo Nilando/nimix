@@ -80,10 +80,6 @@ impl BlockStore {
         Ok(ptr)
     }
 
-    pub fn wait_for_sweep(&self) {
-        self.sweep_lock.lock().unwrap();
-    }
-
     // takes a callback that it called once the sweep 
     // has begun
     pub fn sweep<F>(&self, mark: NonZero<u8>, cb: F) 
@@ -96,7 +92,6 @@ impl BlockStore {
         let mut recycle = self.recycle.lock().unwrap();
         let mark: u8 = mark.into();
 
-        cb();
 
         let mut new_rest = vec![];
         let mut new_recycle = vec![];
@@ -137,6 +132,8 @@ impl BlockStore {
         *rest = new_rest;
         *recycle = new_recycle;
         *large = new_large;
+
+        cb();
 
         // TODO: ADD 10 as a CONFIG FREE_RATE
         for _ in 0..10_000 {
