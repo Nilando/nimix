@@ -42,7 +42,7 @@ impl Allocator {
                 .expect("todo: turn this into an alloc error");
             let block_ptr: &AtomicU8 = unsafe { &*ptr.sub(obj_offset).cast() };
 
-            block_ptr.store(mark.into(), Ordering::SeqCst)
+            block_ptr.store(mark.into(), Ordering::Release)
         }
 
         Ok(())

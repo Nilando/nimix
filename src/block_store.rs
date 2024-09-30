@@ -86,17 +86,18 @@ impl BlockStore {
     where
         F: FnOnce()
     {
-        let mut free = self.free.lock().unwrap();
         let mut rest = self.rest.lock().unwrap();
         let mut large = self.large.lock().unwrap();
         let mut recycle = self.recycle.lock().unwrap();
         let mark: u8 = mark.into();
 
+        println!("CALLING SWEEP CALLBACK");
         sweep_callback();
 
         let mut new_rest = vec![];
         let mut new_recycle = vec![];
         let mut new_large = vec![];
+        let mut new_free = vec![];
 
         while let Some(mut block) = recycle.pop() {
             block.reset_hole(mark);
@@ -104,7 +105,7 @@ impl BlockStore {
             if block.is_marked(mark) {
                 new_recycle.push(block);
             } else {
-                free.push(block);
+                new_free.push(block);
             }
         }
 
@@ -118,14 +119,14 @@ impl BlockStore {
                     new_rest.push(block);
                 }
             } else {
-                free.push(block);
+                new_free.push(block);
             }
         }
 
         while let Some(block) = large.pop() {
             let header_mark = unsafe { &*(block.as_ptr() as *const AllocMark) };
 
-            if header_mark.load(Ordering::Relaxed) == mark {
+            if header_mark.load(Ordering::Acquire) == mark {
                 new_large.push(block);
             }
         }
@@ -134,15 +135,9 @@ impl BlockStore {
         *recycle = new_recycle;
         *large = new_large;
 
-        // TODO: ADD 10 as a CONFIG FREE_RATE
-        for _ in 0..10_000 {
-            if free.len() == 0 {
-                break;
-            }
-
-            self.block_count.fetch_sub(1, Ordering::Relaxed);
-            free.pop();
-        }
+        println!("FREEING BLOCKS");
+        let mut free = self.free.lock().unwrap();
+        *free = new_free;
     }
 
     fn new_block(&self) -> Result<BumpBlock, AllocError> {
