@@ -80,8 +80,7 @@ impl BlockStore {
         Ok(ptr)
     }
 
-    // takes a callback that it called once the sweep 
-    // has begun
+    // REFACTOR THIS: there needs to be a better story behind what this callback is
     pub fn sweep<F>(&self, mark: NonZero<u8>, sweep_callback: F) 
     where
         F: FnOnce()
@@ -91,7 +90,6 @@ impl BlockStore {
         let mut recycle = self.recycle.lock().unwrap();
         let mark: u8 = mark.into();
 
-        println!("CALLING SWEEP CALLBACK");
         sweep_callback();
 
         let mut new_rest = vec![];
@@ -135,7 +133,6 @@ impl BlockStore {
         *recycle = new_recycle;
         *large = new_large;
 
-        println!("FREEING BLOCKS");
         let mut free = self.free.lock().unwrap();
         *free = new_free;
     }
