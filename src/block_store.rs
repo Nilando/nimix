@@ -135,7 +135,7 @@ impl BlockStore {
 
         let used_block_count = rest.len() + recycle.len();
         let mut free = self.free.lock().unwrap();
-        println!("NIMIX FREE");
+        println!("NIMIX FREEING: {}", free.len());
         *free = vec![];
     }
 
