@@ -133,8 +133,9 @@ impl BlockStore {
         *recycle = new_recycle;
         *large = new_large;
 
+        let used_block_count = rest.len() + recycle.len();
         let mut free = self.free.lock().unwrap();
-        *free = new_free;
+        *free = new_free.split_off(used_block_count / 10);
     }
 
     fn new_block(&self) -> Result<BumpBlock, AllocError> {
