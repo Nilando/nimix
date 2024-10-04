@@ -13,7 +13,6 @@ pub struct BlockStore {
     recycle: Mutex<Vec<BumpBlock>>,
     rest: Mutex<Vec<BumpBlock>>,
     large: Mutex<Vec<Block>>,
-    sweep_lock: Mutex<()>,
 }
 
 impl BlockStore {
@@ -24,7 +23,6 @@ impl BlockStore {
             recycle: Mutex::new(vec![]),
             rest: Mutex::new(vec![]),
             large: Mutex::new(vec![]),
-            sweep_lock: Mutex::new(()),
         }
     }
 
@@ -88,6 +86,7 @@ impl BlockStore {
         let mut rest = self.rest.lock().unwrap();
         let mut large = self.large.lock().unwrap();
         let mut recycle = self.recycle.lock().unwrap();
+        let mut free = self.free.lock().unwrap();
         let mark: u8 = mark.into();
 
         sweep_callback();
@@ -133,9 +132,6 @@ impl BlockStore {
         *recycle = new_recycle;
         *large = new_large;
 
-        let used_block_count = rest.len() + recycle.len();
-        let mut free = self.free.lock().unwrap();
-        println!("NIMIX FREEING: {}", free.len());
         *free = vec![];
     }
 
