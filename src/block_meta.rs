@@ -257,11 +257,13 @@ mod tests {
     fn mark_block() {
         let alloc = Allocator::new();
         let medium = Layout::new::<[u8; 512]>();
-        let ptr: *mut u8 = alloc.alloc(medium).unwrap();
+        unsafe {
+            let ptr: *mut u8 = alloc.alloc(medium).unwrap();
 
-        Allocator::mark(ptr, medium, NonZero::new(1).unwrap());
+            Allocator::mark(ptr, medium, NonZero::new(1).unwrap());
+            let meta = BlockMeta::from_ptr(ptr);
+            assert_eq!(meta.get_block(), 1);
+        }
 
-        let meta = BlockMeta::from_ptr(ptr);
-        assert_eq!(meta.get_block(), 1);
     }
 }

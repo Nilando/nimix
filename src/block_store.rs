@@ -86,7 +86,6 @@ impl BlockStore {
         let mut rest = self.rest.lock().unwrap();
         let mut large = self.large.lock().unwrap();
         let mut recycle = self.recycle.lock().unwrap();
-        let mut free = self.free.lock().unwrap();
         let mark: u8 = mark.into();
 
         sweep_callback();
@@ -132,7 +131,10 @@ impl BlockStore {
         *recycle = new_recycle;
         *large = new_large;
 
+        let mut free = self.free.lock().unwrap();
         *free = vec![];
+
+        self.block_count.fetch_sub(new_free.len(), Ordering::SeqCst);
     }
 
     fn new_block(&self) -> Result<BumpBlock, AllocError> {

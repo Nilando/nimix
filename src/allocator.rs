@@ -24,13 +24,13 @@ impl Allocator {
         }
     }
 
-    pub fn alloc(&self, layout: Layout) -> Result<*mut u8, AllocError> {
+    pub unsafe fn alloc(&self, layout: Layout) -> Result<*mut u8, AllocError> {
         let ptr = self.head.alloc(layout)?;
 
         Ok(ptr as *mut u8)
     }
 
-    pub fn mark(ptr: *mut u8, layout: Layout, mark: NonZero<u8>) -> Result<(), AllocError> {
+    pub unsafe fn mark(ptr: *mut u8, layout: Layout, mark: NonZero<u8>) -> Result<(), AllocError> {
         if SizeClass::get_for_size(layout.size())? != SizeClass::Large {
             let meta = BlockMeta::from_ptr(ptr);
 
@@ -49,7 +49,7 @@ impl Allocator {
     }
 
     // callback is called once the sweep is initialized
-    pub fn sweep<F: FnOnce()>(&self, mark: NonZero<u8>, cb: F) 
+    pub unsafe fn sweep<F: FnOnce()>(&self, mark: NonZero<u8>, cb: F) 
     {
         self.head.sweep(mark.into(), cb);
     }
