@@ -133,6 +133,7 @@ mod tests {
     use super::super::constants::BLOCK_CAPACITY;
     use super::super::block::Block;
     use super::*;
+    use std::num::NonZero;
     use std::alloc::Layout;
 
     #[test]
