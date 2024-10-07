@@ -131,6 +131,7 @@ impl BlockStore {
         *recycle = new_recycle;
         *large = new_large;
 
+        // TODO instead of freeing everything do some hueristic calculations
         let mut free = self.free.lock().unwrap();
         *free = vec![];
 
