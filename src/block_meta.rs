@@ -3,7 +3,6 @@ use super::constants::{
 };
 use super::size_class::SizeClass;
 use std::sync::atomic::{AtomicU8, Ordering};
-use std::num::NonZero;
 
 pub struct BlockMeta {
     lines: *const [AtomicU8; LINE_COUNT],
