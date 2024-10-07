@@ -1,6 +1,11 @@
 [package]
 name = "nimix"
 version = "0.1.0"
+authors = ["Niland Schumacher <naschuma@ucsc.edu>"]
 edition = "2021"
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/nilandasd/nimix"
+rust-version = "1.79.0"
 
 [dependencies]
