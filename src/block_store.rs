@@ -1,11 +1,15 @@
-use super::allocator::AllocMark;
+use super::AllocMark;
 use super::block::Block;
 use super::bump_block::BumpBlock;
 use super::error::AllocError;
+use super::constants::{BLOCK_SIZE, MAX_FREE_BLOCKS};
 use std::alloc::Layout;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
 use std::num::NonZero;
+
+unsafe impl Send for BlockStore {}
+unsafe impl Sync for BlockStore {}
 
 pub struct BlockStore {
     block_count: AtomicUsize,
@@ -24,6 +28,13 @@ impl BlockStore {
             rest: Mutex::new(vec![]),
             large: Mutex::new(vec![]),
         }
+    }
+
+    pub fn get_size(&self) -> usize {
+        let block_space = self.block_count() * BLOCK_SIZE;
+        let large_space = self.count_large_space();
+
+        block_space + large_space
     }
 
     pub fn push_rest(&self, block: BumpBlock) {
@@ -119,6 +130,11 @@ impl BlockStore {
             }
         }
 
+        *rest = new_rest;
+        *recycle = new_recycle;
+        drop(rest);
+        drop(recycle);
+
         while let Some(block) = large.pop() {
             let header_mark = unsafe { &*(block.as_ptr() as *const AllocMark) };
 
@@ -127,13 +143,17 @@ impl BlockStore {
             }
         }
 
-        *rest = new_rest;
-        *recycle = new_recycle;
         *large = new_large;
+        drop(large);
 
-        // TODO instead of freeing everything do some hueristic calculations
         let mut free = self.free.lock().unwrap();
-        *free = vec![];
+        while let Some(free_block) = new_free.pop() {
+            if free.len() > MAX_FREE_BLOCKS {
+                free.push(free_block);
+            } else {
+                break;
+            }
+        }
 
         self.block_count.fetch_sub(new_free.len(), Ordering::SeqCst);
     }

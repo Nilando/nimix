@@ -1,12 +1,10 @@
 use super::block_store::BlockStore;
 use super::bump_block::BumpBlock;
-use super::constants::BLOCK_SIZE;
 use super::error::AllocError;
 use super::size_class::SizeClass;
 use std::alloc::Layout;
 use std::cell::Cell;
 use std::sync::Arc;
-use std::num::NonZero;
 
 pub struct AllocHead {
     head: Cell<Option<BumpBlock>>,
@@ -26,13 +24,7 @@ impl Clone for AllocHead {
 
 impl Drop for AllocHead {
     fn drop(&mut self) {
-        if let Some(head) = self.head.take() {
-            self.block_store.push_recycle(head);
-        }
-
-        if let Some(overflow) = self.overflow.take() {
-            self.block_store.push_recycle(overflow);
-        }
+        self.flush()
     }
 }
 
@@ -42,6 +34,16 @@ impl AllocHead {
             head: Cell::new(None),
             overflow: Cell::new(None),
             block_store,
+        }
+    }
+
+    pub fn flush(&self)  {
+        if let Some(head) = self.head.take() {
+            self.block_store.push_recycle(head);
+        }
+
+        if let Some(overflow) = self.overflow.take() {
+            self.block_store.push_recycle(overflow);
         }
     }
 
@@ -128,20 +130,6 @@ impl AllocHead {
             }
             None => None,
         }
-    }
-
-    pub fn get_size(&self) -> usize {
-        let block_space = self.block_store.block_count() * BLOCK_SIZE;
-        let large_space = self.block_store.count_large_space();
-
-        block_space + large_space
-    }
-
-    pub fn sweep<F>(&self, mark: NonZero<u8>, cb: F) 
-    where
-        F: FnOnce()
-    {
-        self.block_store.sweep(mark, cb);
     }
 }
 

@@ -129,12 +129,12 @@ impl BlockMeta {
 
 #[cfg(test)]
 mod tests {
-    use super::super::allocator::Allocator;
     use super::super::constants::BLOCK_CAPACITY;
     use super::super::block::Block;
     use super::*;
     use std::num::NonZero;
     use std::alloc::Layout;
+    use crate::mark;
 
     #[test]
     fn test_mark_block() {
@@ -255,13 +255,15 @@ mod tests {
 
     #[test]
     fn mark_block() {
-        let alloc = Allocator::new();
+        let block = Block::default().unwrap();
+        let meta = BlockMeta::new(block.as_ptr());
         let medium = Layout::new::<[u8; 512]>();
-        unsafe {
-            let ptr: *mut u8 = alloc.alloc(medium).unwrap();
 
-            Allocator::mark(ptr, medium, NonZero::new(1).unwrap());
-            let meta = BlockMeta::from_ptr(ptr);
+        unsafe {
+            let ptr: *const u8 = block.as_ptr();
+
+            mark(ptr as *mut u8, medium, NonZero::new(1).unwrap()).expect("should mark");
+
             assert_eq!(meta.get_block(), 1);
         }
 
