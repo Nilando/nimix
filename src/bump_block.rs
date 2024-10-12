@@ -3,6 +3,7 @@ use super::block_meta::BlockMeta;
 use super::constants::{BLOCK_CAPACITY, SMALL_OBJECT_MIN};
 use super::error::AllocError;
 use std::alloc::Layout;
+use std::num::NonZero;
 
 pub struct BumpBlock {
     cursor: usize,
@@ -13,22 +14,22 @@ pub struct BumpBlock {
 
 impl BumpBlock {
     pub fn new() -> Result<BumpBlock, AllocError> {
-        let inner_block = Block::default()?;
-        let block_ptr = inner_block.as_ptr();
-        let block = BumpBlock {
+        let block = Block::default()?;
+        let meta = BlockMeta::new(&block);
+        let bump_block = BumpBlock {
             cursor: BLOCK_CAPACITY,
             limit: 0,
-            block: inner_block,
-            meta: BlockMeta::new(block_ptr),
+            block,
+            meta
         };
 
-        Ok(block)
+        Ok(bump_block)
     }
 
-    pub fn reset_hole(&mut self, mark: u8) {
+    pub fn reset_hole(&mut self, mark: NonZero<u8>) {
         self.meta.free_unmarked(mark);
 
-        if self.meta.get_block() != mark {
+        if self.meta.get_block() != mark.into() {
             self.cursor = BLOCK_CAPACITY;
             self.limit = 0;
             return;
@@ -72,8 +73,8 @@ impl BumpBlock {
         self.cursor - self.limit
     }
 
-    pub fn is_marked(&self, mark: u8) -> bool {
-        self.meta.get_block() == mark
+    pub fn is_marked(&self, mark: NonZero<u8>) -> bool {
+        self.meta.get_block() == mark.into()
     }
 }
 
@@ -105,7 +106,7 @@ mod tests {
             b.meta.set_line(i, 1);
         }
 
-        b.reset_hole(1);
+        b.reset_hole(NonZero::new(1).unwrap());
 
         assert!(b.inner_alloc(Layout::new::<u8>()).is_none());
     }
@@ -118,7 +119,7 @@ mod tests {
             b.meta.set_line(i, 1);
         }
 
-        b.reset_hole(1);
+        b.reset_hole(NonZero::new(1).unwrap());
 
         for i in 0..(BLOCK_CAPACITY / 2) {
             let ptr = b.inner_alloc(Layout::new::<u8>()).unwrap();
@@ -143,9 +144,8 @@ mod tests {
             }
         }
 
-        b.meta.set_block(1);
-
-        b.reset_hole(1);
+        b.meta.set_block(NonZero::new(1).unwrap());
+        b.reset_hole(NonZero::new(1).unwrap());
 
         assert!(b.inner_alloc(Layout::new::<u8>()).is_none());
         assert_eq!(b.cursor, 0);

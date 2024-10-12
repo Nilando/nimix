@@ -1,22 +1,24 @@
-use super::AllocMark;
-use super::block::Block;
 use super::bump_block::BumpBlock;
 use super::error::AllocError;
 use super::constants::{BLOCK_SIZE, MAX_FREE_BLOCKS};
+use super::large_block::LargeBlock;
 use std::alloc::Layout;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
 use std::num::NonZero;
+use std::sync::LazyLock;
 
 unsafe impl Send for BlockStore {}
 unsafe impl Sync for BlockStore {}
+
+pub static BLOCK_STORE: LazyLock<BlockStore> = LazyLock::new(|| BlockStore::new());
 
 pub struct BlockStore {
     block_count: AtomicUsize,
     free: Mutex<Vec<BumpBlock>>,
     recycle: Mutex<Vec<BumpBlock>>,
     rest: Mutex<Vec<BumpBlock>>,
-    large: Mutex<Vec<Block>>,
+    large: Mutex<Vec<LargeBlock>>,
 }
 
 impl BlockStore {
@@ -76,15 +78,11 @@ impl BlockStore {
     }
 
     // large objects are stored with a single byte of meta info to store their mark
-    pub fn create_large(&self, obj_layout: Layout) -> Result<*const u8, AllocError> {
-        let header_layout = Layout::new::<AllocMark>();
-        let (header_obj_layout, obj_offset) = header_layout
-            .extend(obj_layout)
-            .expect("todo: turn this into an alloc error");
-        let block = Block::new(header_obj_layout)?;
-        let ptr = unsafe { block.as_ptr().add(obj_offset) };
+    pub fn create_large(&self, layout: Layout) -> Result<*const u8, AllocError> {
+        let large_block = LargeBlock::new(layout)?;
+        let ptr = large_block.as_ptr();
 
-        self.large.lock().unwrap().push(block);
+        self.large.lock().unwrap().push(large_block);
 
         Ok(ptr)
     }
@@ -97,7 +95,6 @@ impl BlockStore {
         let mut rest = self.rest.lock().unwrap();
         let mut large = self.large.lock().unwrap();
         let mut recycle = self.recycle.lock().unwrap();
-        let mark: u8 = mark.into();
 
         sweep_callback();
 
@@ -136,9 +133,7 @@ impl BlockStore {
         drop(recycle);
 
         while let Some(block) = large.pop() {
-            let header_mark = unsafe { &*(block.as_ptr() as *const AllocMark) };
-
-            if header_mark.load(Ordering::Acquire) == mark {
+            if block.is_marked(mark) {
                 new_large.push(block);
             }
         }
@@ -148,7 +143,7 @@ impl BlockStore {
 
         let mut free = self.free.lock().unwrap();
         while let Some(free_block) = new_free.pop() {
-            if free.len() > MAX_FREE_BLOCKS {
+            if free.len() < MAX_FREE_BLOCKS {
                 free.push(free_block);
             } else {
                 break;
