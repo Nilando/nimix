@@ -12,18 +12,25 @@ pub struct BlockMeta {
 
 impl BlockMeta {
     pub fn new(block: &Block) -> BlockMeta {
-        let meta = Self {
-            lines: unsafe { block.as_ptr().add(LINE_MARK_START) as *const [AtomicU8; LINE_COUNT] },
-        };
+        let meta = unsafe { Self::from_block_ptr(block.as_ptr()) };
         meta.reset();
         meta
     }
 
+    pub unsafe fn from_block_ptr(ptr: *const u8) -> Self {
+        Self {
+            lines: ptr.add(LINE_MARK_START) as *const [AtomicU8; LINE_COUNT],
+        }
+    }
+
     pub unsafe fn from_ptr(ptr: *const u8) -> Self {
         let offset = (ptr as usize) % BLOCK_SIZE;
-        let block: &Block = unsafe{ &*(ptr.byte_sub(offset) as *const Block) };
 
-        Self::new(block)
+        unsafe {
+            let block_ptr = ptr.byte_sub(offset);
+
+            Self::from_block_ptr(block_ptr)
+        }
     }
 
     pub unsafe fn mark(&self, ptr: *mut u8, size: u32, size_class: SizeClass, mark: NonZero<u8>) {
@@ -247,7 +254,6 @@ mod tests {
         assert_eq!(got, expect);
     }
 
-    #[ignore]
     #[test]
     fn mark_block_from_ptr() {
         let block = Block::default().unwrap();
@@ -258,9 +264,8 @@ mod tests {
             let ptr: *const u8 = block.as_ptr();
 
             mark(ptr as *mut u8, medium, NonZero::new(1).unwrap()).expect("should mark");
-
-            assert_eq!(meta.get_block(), 1);
         }
 
+        assert_eq!(meta.get_block(), 1);
     }
 }
