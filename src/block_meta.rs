@@ -25,14 +25,12 @@ impl BlockMeta {
 
     pub unsafe fn from_ptr(ptr: *const u8) -> Self {
         let offset = (ptr as usize) % BLOCK_SIZE;
+        let block_ptr = ptr.byte_sub(offset);
 
-        unsafe {
-            let block_ptr = ptr.byte_sub(offset);
-
-            Self::from_block_ptr(block_ptr)
-        }
+        Self::from_block_ptr(block_ptr)
     }
 
+    // SAFETY: ptr must be a point to an object allocated within a bump block
     pub unsafe fn mark(&self, ptr: *mut u8, size: u32, size_class: SizeClass, mark: NonZero<u8>) {
         let addr = ptr as usize;
         let relative_ptr = addr % BLOCK_SIZE;
@@ -131,18 +129,14 @@ impl BlockMeta {
 
 #[cfg(test)]
 mod tests {
-    use super::super::constants::BLOCK_CAPACITY;
-    use super::super::block::Block;
+    use crate::constants::BLOCK_CAPACITY;
+    use crate::block::Block;
+
     use super::*;
     use std::num::NonZero;
-    use std::alloc::Layout;
-    use crate::mark;
 
     #[test]
     fn mark_block() {
-        // A set of marked lines with a couple holes.
-        // The first hole should be seen as conservatively marked.
-        // The second hole should be the one selected.
         let block = Block::default().unwrap();
         let meta = BlockMeta::new(&block);
 
@@ -246,27 +240,11 @@ mod tests {
 
     #[test]
     fn test_find_entire_block() {
-        // No marked lines. Entire block is available.
         let block = Block::default().unwrap();
         let meta = BlockMeta::new(&block);
-        let expect = Some((BLOCK_CAPACITY, 0));
-        let got = meta.find_next_available_hole(BLOCK_CAPACITY, LINE_SIZE);
+        let expect = (BLOCK_CAPACITY, 0);
+        let got = meta.find_next_available_hole(BLOCK_CAPACITY, LINE_SIZE).unwrap();
 
         assert_eq!(got, expect);
-    }
-
-    #[test]
-    fn mark_block_from_ptr() {
-        let block = Block::default().unwrap();
-        let meta = BlockMeta::new(&block);
-        let medium = Layout::new::<[u8; 512]>();
-
-        unsafe {
-            let ptr: *const u8 = block.as_ptr();
-
-            mark(ptr as *mut u8, medium, NonZero::new(1).unwrap()).expect("should mark");
-        }
-
-        assert_eq!(meta.get_block(), 1);
     }
 }

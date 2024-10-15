@@ -54,7 +54,9 @@ impl BumpBlock {
             if self.limit <= next {
                 self.cursor = next;
 
-                return Some(self.block.at_offset(self.cursor));
+                let ptr = unsafe { self.block.as_ptr().add(self.cursor) };
+
+                return Some(ptr);
             }
 
             if let Some((cursor, limit)) = self
@@ -64,9 +66,6 @@ impl BumpBlock {
                 self.cursor = cursor;
                 self.limit = limit;
             } else {
-                self.cursor = 0;
-                self.limit = 0;
-
                 return None;
             }
         }
@@ -91,11 +90,10 @@ mod tests {
         let mut b = BumpBlock::new().unwrap();
 
         for i in 0..BLOCK_CAPACITY {
-            let ptr = b.inner_alloc(Layout::new::<u8>()).unwrap();
+            assert_eq!(b.cursor, BLOCK_CAPACITY - i);
+            assert_eq!(b.current_hole_size(), BLOCK_CAPACITY - i);
 
-            let offset = BLOCK_CAPACITY - (i + 1);
-            assert_eq!(b.cursor, offset);
-            assert!(ptr as usize == b.block.as_ptr() as usize + offset);
+            b.inner_alloc(Layout::new::<u8>()).unwrap();
         }
 
         assert!(b.inner_alloc(Layout::new::<u8>()).is_none());

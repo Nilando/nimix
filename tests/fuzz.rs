@@ -92,7 +92,7 @@ impl Fuzzer {
 const NUM_THREADS: usize = 16;
 const MARK_LOOPS: usize = 10;
 const SWEEP_LOOPS: usize = 10;
-const ALLOC_LOOPS: usize = 100;
+const ALLOC_LOOPS: usize = 200;
 
 #[test]
 fn fuzz() {
@@ -121,11 +121,12 @@ fn fuzz() {
                 join_handles.push(jh);
             }
 
+            // sweep while fuzzers are marking
+            unsafe { sweep(marker, || {}); }
+
             for jh in join_handles.into_iter() {
                 fuzzers.push(jh.join().unwrap());
             }
-
-            unsafe { sweep(marker, || {}); }
         }
 
         let bytes: f64 = get_size() as f64;

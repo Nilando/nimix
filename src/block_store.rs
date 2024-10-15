@@ -39,12 +39,16 @@ impl BlockStore {
         block_space + large_space
     }
 
-    pub fn push_rest(&self, block: BumpBlock) {
+    pub fn rest(&self, block: BumpBlock) {
         self.rest.lock().unwrap().push(block);
     }
 
-    pub fn push_recycle(&self, block: BumpBlock) {
-        self.recycle.lock().unwrap().push(block);
+    pub fn recycle(&self, block: BumpBlock) {
+        if block.current_hole_size() >= RECYCLE_HOLE_MIN {
+            self.recycle.lock().unwrap().push(block);
+        } else {
+            self.rest(block);
+        }
     }
 
     pub fn get_head(&self) -> Result<BumpBlock, AllocError> {

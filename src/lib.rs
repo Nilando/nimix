@@ -40,7 +40,7 @@ pub unsafe fn mark(ptr: *mut u8, layout: Layout, mark: NonZero<u8>) -> Result<()
     Ok(())
 }
 
-pub unsafe fn sweep<F: FnOnce()>(mark: NonZero<u8>, cb: F) {
+pub unsafe fn sweep(mark: NonZero<u8>, cb: impl FnOnce()) {
     BLOCK_STORE.sweep(mark.into(), cb);
 }
 
