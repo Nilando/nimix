@@ -9,7 +9,5 @@ repository = "https://github.com/nilandasd/nimix"
 rust-version = "1.79.0"
 description = "An allocator designed to be use by a GC"
 
-[dependencies]
-
 [dev-dependencies]
 rand = "0.8.5"

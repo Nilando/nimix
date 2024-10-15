@@ -50,10 +50,8 @@ impl BlockStore {
     pub fn get_head(&self) -> Result<BumpBlock, AllocError> {
         if let Some(recycle_block) = self.recycle.lock().unwrap().pop() {
             Ok(recycle_block)
-        } else if let Some(free_block) = self.free.lock().unwrap().pop() {
-            Ok(free_block)
         } else {
-            self.new_block()
+            self.get_overflow()
         }
     }
 

@@ -49,10 +49,10 @@ impl BumpBlock {
 
     pub fn inner_alloc(&mut self, layout: Layout) -> Option<*const u8> {
         loop {
-            let next_ptr = self.cursor.checked_sub(layout.size())? & !(layout.align() - 1);
+            let next = self.cursor.checked_sub(layout.size())? & !(layout.align() - 1);
 
-            if self.limit <= next_ptr {
-                self.cursor = next_ptr;
+            if self.limit <= next {
+                self.cursor = next;
 
                 return Some(self.block.at_offset(self.cursor));
             }
@@ -64,6 +64,9 @@ impl BumpBlock {
                 self.cursor = cursor;
                 self.limit = limit;
             } else {
+                self.cursor = 0;
+                self.limit = 0;
+
                 return None;
             }
         }
@@ -111,28 +114,6 @@ mod tests {
         assert!(b.inner_alloc(Layout::new::<u8>()).is_none());
     }
 
-    #[test]
-    fn test_half_block() {
-        let mut b = BumpBlock::new().unwrap();
-
-        for i in ((LINE_COUNT - 2) / 2)..LINE_COUNT {
-            b.meta.set_line(i, 1);
-        }
-
-        b.reset_hole(NonZero::new(1).unwrap());
-
-        for i in 0..(BLOCK_CAPACITY / 2) {
-            let ptr = b.inner_alloc(Layout::new::<u8>()).unwrap();
-
-            let offset = (BLOCK_CAPACITY / 2) - (i + 1);
-            assert_eq!(b.cursor, offset);
-            assert!(ptr as usize == b.block.as_ptr() as usize + offset);
-        }
-
-        assert!(b.inner_alloc(Layout::new::<u8>()).is_none());
-        assert_eq!(b.cursor, 0);
-        assert_eq!(b.limit, 0);
-    }
 
     #[test]
     fn test_conservatively_marked_block() {

@@ -10,15 +10,6 @@ pub struct AllocHead {
     overflow: Cell<Option<BumpBlock>>,
 }
 
-impl Clone for AllocHead {
-    fn clone(&self) -> Self {
-        Self {
-            head: Cell::new(None),
-            overflow: Cell::new(None),
-        }
-    }
-}
-
 impl Drop for AllocHead {
     fn drop(&mut self) {
         self.flush()
@@ -34,7 +25,7 @@ impl AllocHead {
     }
 
     // maybe this could be public?
-    fn flush(&self)  {
+    pub fn flush(&self)  {
         if let Some(head) = self.head.take() {
             BLOCK_STORE.push_recycle(head);
         }
@@ -58,11 +49,11 @@ impl AllocHead {
         // this is okay be we already tried to alloc in head and didn't have space
         // and any block returned by get new head should have space for a small object
         loop {
-            self.get_new_head()?;
-
             if let Some(ptr) = self.head_alloc(layout) {
                 return Ok(ptr);
             }
+
+            self.get_new_head()?;
         }
     }
 
@@ -95,6 +86,7 @@ impl AllocHead {
     fn get_new_overflow(&self) -> Result<(), AllocError> {
         let new_overflow = BLOCK_STORE.get_overflow()?;
         let recycle_block = self.overflow.take();
+
         self.overflow.set(Some(new_overflow));
 
         if let Some(block) = recycle_block {

@@ -6,8 +6,7 @@ mod bump_block;
 mod error;
 mod large_block;
 mod size_class;
-
-pub mod constants;
+mod constants;
 
 use alloc_head::AllocHead;
 use block_meta::BlockMeta;

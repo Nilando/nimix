@@ -43,10 +43,11 @@ impl BlockMeta {
         if size_class == SizeClass::Small {
             self.set_line(line, mark.into());
         } else {
-            let num_lines = size as u16 / LINE_SIZE as u16;
+            let relative_end = relative_ptr + size as usize;
+            let end_line = (relative_end - 1) / LINE_SIZE;
 
-            for i in 0..num_lines {
-                self.set_line(line + i as usize, mark.into());
+            for i in line..end_line {
+                self.set_line(i, mark.into());
             }
         }
 

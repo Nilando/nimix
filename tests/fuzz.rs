@@ -10,13 +10,6 @@ use nimix::{
     mark,
     alloc,
     get_size,
-    constants::{
-        SMALL_OBJECT_MIN,
-        SMALL_OBJECT_MAX,
-        MEDIUM_OBJECT_MIN,
-        MEDIUM_OBJECT_MAX,
-        LARGE_OBJECT_MIN,
-    }
 };
 
 unsafe impl Send for Fuzzer {}
@@ -70,14 +63,7 @@ impl Fuzzer {
         let mut rng = rand::thread_rng();
 
         for _ in 0..ALLOC_LOOPS {
-            let size =
-                match rng.gen_range(0..100) {
-                    0..80 => rng.gen_range(SMALL_OBJECT_MIN..=SMALL_OBJECT_MAX),
-                    80..99 => rng.gen_range(MEDIUM_OBJECT_MIN..=MEDIUM_OBJECT_MAX),
-                    99..100 => rng.gen_range(LARGE_OBJECT_MIN..=(LARGE_OBJECT_MIN * 2)),
-                    _ => unreachable!()
-                };
-
+            let size = rng.gen_range(1..=1024 * 5);
             let value = Value::new(size);
 
             unsafe {
@@ -92,7 +78,7 @@ impl Fuzzer {
                 }
 
                 let coin_flip = rng.gen_range(0..100);
-                if coin_flip < 20 {
+                if coin_flip < 5 {
                     self.values.insert(dest, value);
                     mark(dest, layout, self.marker).unwrap();
                 } else {
@@ -103,12 +89,11 @@ impl Fuzzer {
     }
 }
 
-const NUM_THREADS: usize = 4;
-const MARK_LOOPS: usize = 5;
+const NUM_THREADS: usize = 16;
+const MARK_LOOPS: usize = 10;
 const SWEEP_LOOPS: usize = 10;
-const ALLOC_LOOPS: usize = 2000;
+const ALLOC_LOOPS: usize = 100;
 
-#[ignore]
 #[test]
 fn fuzz() {
     for l in 1..=MARK_LOOPS {
@@ -140,15 +125,11 @@ fn fuzz() {
                 fuzzers.push(jh.join().unwrap());
             }
 
-            let bytes: f64 = get_size() as f64;
-            let mb = (bytes / 1024.0) / 1024.0;
-            println!("HEAP SIZE: {:.2} mb *", mb);
-
             unsafe { sweep(marker, || {}); }
-
-            let bytes: f64 = get_size() as f64;
-            let mb = (bytes / 1024.0) / 1024.0;
-            println!("HEAP SIZE: {:.2} mb", mb);
         }
+
+        let bytes: f64 = get_size() as f64;
+        let mb = (bytes / 1024.0) / 1024.0;
+        println!("HEAP SIZE: {:.2} mb", mb);
     }
 }
