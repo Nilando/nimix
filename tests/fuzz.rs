@@ -63,7 +63,12 @@ impl Fuzzer {
         let mut rng = rand::thread_rng();
 
         for _ in 0..ALLOC_LOOPS {
-            let size = rng.gen_range(1..=1024 * 5);
+            let mut size = rng.gen_range(1..=2000);
+
+            if size == 2000 {
+                size = 1024 * 16 + 1;
+            }
+
             let value = Value::new(size);
 
             unsafe {
@@ -91,8 +96,8 @@ impl Fuzzer {
 
 const NUM_THREADS: usize = 16;
 const MARK_LOOPS: usize = 10;
-const SWEEP_LOOPS: usize = 10;
-const ALLOC_LOOPS: usize = 200;
+const SWEEP_LOOPS: usize = 20;
+const ALLOC_LOOPS: usize = 1000;
 
 #[test]
 fn fuzz() {
@@ -121,7 +126,7 @@ fn fuzz() {
                 join_handles.push(jh);
             }
 
-            // sweep while fuzzers are marking
+            // sweep while fuzzers are marking!
             unsafe { sweep(marker, || {}); }
 
             for jh in join_handles.into_iter() {

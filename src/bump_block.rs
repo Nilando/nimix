@@ -82,7 +82,6 @@ impl BumpBlock {
 
 #[cfg(test)]
 mod tests {
-    use super::super::constants::LINE_COUNT;
     use super::*;
 
     #[test]
@@ -97,40 +96,6 @@ mod tests {
         }
 
         assert!(b.inner_alloc(Layout::new::<u8>()).is_none());
-    }
-
-    #[test]
-    fn test_full_block() {
-        let mut b = BumpBlock::new().unwrap();
-
-        for i in 0..LINE_COUNT {
-            b.meta.set_line(i, 1);
-        }
-
-        b.meta.mark_block(NonZero::new(1).unwrap());
-
-        b.reset_hole(NonZero::new(1).unwrap());
-
-        assert_eq!(b.inner_alloc(Layout::new::<u8>()), None);
-    }
-
-
-    #[test]
-    fn test_conservatively_marked_block() {
-        let mut b = BumpBlock::new().unwrap();
-
-        for i in 0..LINE_COUNT {
-            if i % 2 == 0 {
-                b.meta.set_line(i, 1);
-            }
-        }
-
-        b.meta.mark_block(NonZero::new(1).unwrap());
-        b.reset_hole(NonZero::new(1).unwrap());
-
-        assert!(b.inner_alloc(Layout::new::<u8>()).is_none());
-        assert_eq!(b.cursor, 0);
-        assert_eq!(b.limit, 0);
     }
 
     #[test]

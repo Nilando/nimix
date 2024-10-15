@@ -14,6 +14,7 @@ pub struct BlockMeta {
 impl BlockMeta {
     pub fn new(block: &Block) -> BlockMeta {
         let meta = unsafe { Self::from_block_ptr(block.as_ptr()) };
+
         meta.reset();
         meta
     }
@@ -77,22 +78,6 @@ impl BlockMeta {
         unsafe { (&*self.block_mark).store(mark.into(), Ordering::Relaxed) }
     }
 
-    fn get_line(&self, index: usize) -> u8 {
-        self.mark_at(index).load(Ordering::Relaxed).into()
-    }
-
-    pub fn set_line(&self, index: usize, mark: u8) {
-        self.mark_at(index).store(mark.into(), Ordering::Relaxed)
-    }
-
-    fn mark_at(&self, line: usize) -> &AtomicU8 {
-        unsafe { &(&*self.lines)[line] }
-    }
-
-    fn free_block(&self) {
-        unsafe { (&*self.block_mark).store(FREE_MARK, Ordering::Relaxed) }
-    }
-
     pub fn reset(&self) {
         self.free_block();
 
@@ -108,7 +93,7 @@ impl BlockMeta {
     ) -> Option<(usize, usize)> {
         let mut count = 0;
         let starting_line = starting_at / LINE_SIZE;
-        let lines_required = (alloc_size + LINE_SIZE - 1) / LINE_SIZE;
+        let lines_required = alloc_size.div_ceil(LINE_SIZE);
         let mut end = starting_line;
 
         for index in (0..starting_line).rev() {
@@ -138,6 +123,22 @@ impl BlockMeta {
 
         None
     }
+
+    fn get_line(&self, index: usize) -> u8 {
+        self.mark_at(index).load(Ordering::Relaxed).into()
+    }
+
+    fn set_line(&self, index: usize, mark: u8) {
+        self.mark_at(index).store(mark.into(), Ordering::Relaxed)
+    }
+
+    fn mark_at(&self, line: usize) -> &AtomicU8 {
+        unsafe { &(&*self.lines)[line] }
+    }
+
+    fn free_block(&self) {
+        unsafe { (&*self.block_mark).store(FREE_MARK, Ordering::Relaxed) }
+    }
 }
 
 #[cfg(test)]
@@ -149,48 +150,57 @@ mod tests {
     use std::num::NonZero;
 
     #[test]
+    fn new_block_meta_is_reset() {
+        let block = Block::default().unwrap();
+        let meta = BlockMeta::new(&block);
+
+        assert_eq!(meta.get_block_mark(), FREE_MARK);
+
+        for i in 0..LINE_COUNT {
+            assert_eq!(meta.get_line(i), FREE_MARK);
+        }
+    }
+
+    #[test]
     fn mark_block() {
         let block = Block::default().unwrap();
         let meta = BlockMeta::new(&block);
 
         meta.mark_block(NonZero::new(1).unwrap());
-        let got = meta.get_block_mark();
 
-        assert_eq!(got, 1);
+        assert_eq!(meta.get_block_mark(), 1);
+
+        for i in 0..LINE_COUNT {
+            assert_eq!(meta.get_line(i), FREE_MARK);
+        }
     }
 
     #[test]
-    fn test_mark_line() {
+    fn mark_line() {
+        let block = Block::default().unwrap();
+        let meta = BlockMeta::new(&block);
+
+        for i in 0..LINE_COUNT {
+            let mark = 69;
+            meta.set_line(i, mark);
+
+            assert_eq!(mark, meta.get_line(i));
+        }
+    }
+
+    #[test]
+    fn find_next_hole() {
         // A set of marked lines with a couple holes.
         // The first hole should be seen as conservatively marked.
         // The second hole should be the one selected.
         let block = Block::default().unwrap();
         let meta = BlockMeta::new(&block);
 
-        meta.set_line(0, 1);
-
-        let expect = 1;
-        let got = meta.get_line(0);
-
-        assert_eq!(got, expect);
-    }
-
-    #[test]
-    fn test_find_next_hole() {
-        // A set of marked lines with a couple holes.
-        // The first hole should be seen as conservatively marked.
-        // The second hole should be the one selected.
-        let block = Block::default().unwrap();
-        let meta = BlockMeta::new(&block);
-
-        meta.set_line(0, 1);
-        meta.set_line(1, 1);
-        meta.set_line(2, 1);
-        meta.set_line(4, 1);
+        meta.set_line(9, 1);
         meta.set_line(10, 1);
 
         // line 5 should be conservatively marked
-        let expect = Some((10 * LINE_SIZE, 6 * LINE_SIZE));
+        let expect = Some((9 * LINE_SIZE, 0));
 
         let got = meta.find_next_available_hole(10 * LINE_SIZE, LINE_SIZE);
 
@@ -198,14 +208,12 @@ mod tests {
     }
 
     #[test]
-    fn test_find_next_hole_at_line_zero() {
+    fn find_next_hole_at_line_zero() {
         // Should find the hole starting at the beginning of the block
         let block = Block::default().unwrap();
         let meta = BlockMeta::new(&block);
 
         meta.set_line(3, 1);
-        meta.set_line(4, 1);
-        meta.set_line(5, 1);
 
         let expect = Some((3 * LINE_SIZE, 0));
 
@@ -215,7 +223,25 @@ mod tests {
     }
 
     #[test]
-    fn test_find_next_hole_at_block_end() {
+    fn hole_with_conservatively_marked_line() {
+        // hole size should reflect there being one line conservatively marked
+        let block = Block::default().unwrap();
+        let meta = BlockMeta::new(&block);
+
+        meta.set_line(0, 1);
+        meta.set_line(3, 1);
+
+        // LIMIT is LINE_SIZE * 2, b/c line 0 is marked, therefore conservatively
+        // marking line 1. Making the hole is be constrained to only line 2.
+        let expect = Some((3 * LINE_SIZE, LINE_SIZE * 2));
+
+        let got = meta.find_next_available_hole(3 * LINE_SIZE, LINE_SIZE);
+
+        assert_eq!(got, expect);
+    }
+
+    #[test]
+    fn find_next_hole_at_block_end() {
         // The first half of the block is marked.
         // The second half of the block should be identified as a hole.
         let block = Block::default().unwrap();
@@ -234,30 +260,48 @@ mod tests {
     }
 
     #[test]
-    fn test_find_hole_all_conservatively_marked() {
+    fn all_holes_conservatively_marked() {
         // Every other line is marked.
-        // No hole should be found.
+        // No hole should be found due to conservative marking.
         let block = Block::default().unwrap();
         let meta = BlockMeta::new(&block);
 
-        for i in 0..LINE_COUNT {
-            if i % 2 == 0 {
-                // there is no stable step function for range
-                meta.set_line(i, 1);
-            }
+        for i in (0..LINE_COUNT).step_by(2) {
+            meta.set_line(i, 1);
         }
 
-        let got = meta.find_next_available_hole(BLOCK_CAPACITY, LINE_SIZE);
+        let got = meta.find_next_available_hole(BLOCK_CAPACITY, 1);
         assert_eq!(got, None);
     }
 
     #[test]
-    fn test_find_entire_block() {
+    fn entire_block_is_hole() {
         let block = Block::default().unwrap();
         let meta = BlockMeta::new(&block);
         let expect = (BLOCK_CAPACITY, 0);
         let got = meta.find_next_available_hole(BLOCK_CAPACITY, LINE_SIZE).unwrap();
 
         assert_eq!(got, expect);
+    }
+
+    #[test]
+    fn reset_block_meta() {
+        let block = Block::default().unwrap();
+        let meta = BlockMeta::new(&block);
+
+        meta.mark_block(NonZero::new(1).unwrap());
+
+        for i in 0..LINE_COUNT {
+            let mark = 69;
+            meta.set_line(i, mark);
+        }
+
+        meta.reset();
+
+        assert_eq!(meta.get_block_mark(), FREE_MARK);
+
+        for i in 0..LINE_COUNT {
+            assert_eq!(meta.get_line(i), FREE_MARK);
+        }
     }
 }
