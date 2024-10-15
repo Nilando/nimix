@@ -29,7 +29,7 @@ impl BumpBlock {
     pub fn reset_hole(&mut self, mark: NonZero<u8>) {
         self.meta.free_unmarked(mark);
 
-        if self.meta.get_block() != mark.into() {
+        if self.meta.get_block_mark() != mark.into() {
             self.cursor = BLOCK_CAPACITY;
             self.limit = 0;
             return;
@@ -76,7 +76,7 @@ impl BumpBlock {
     }
 
     pub fn is_marked(&self, mark: NonZero<u8>) -> bool {
-        self.meta.get_block() == mark.into()
+        self.meta.get_block_mark() == mark.into()
     }
 }
 
@@ -107,9 +107,11 @@ mod tests {
             b.meta.set_line(i, 1);
         }
 
+        b.meta.mark_block(NonZero::new(1).unwrap());
+
         b.reset_hole(NonZero::new(1).unwrap());
 
-        assert!(b.inner_alloc(Layout::new::<u8>()).is_none());
+        assert_eq!(b.inner_alloc(Layout::new::<u8>()), None);
     }
 
 
@@ -123,7 +125,7 @@ mod tests {
             }
         }
 
-        b.meta.set_block(NonZero::new(1).unwrap());
+        b.meta.mark_block(NonZero::new(1).unwrap());
         b.reset_hole(NonZero::new(1).unwrap());
 
         assert!(b.inner_alloc(Layout::new::<u8>()).is_none());

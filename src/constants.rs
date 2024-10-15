@@ -4,6 +4,7 @@ pub const LINE_SIZE: usize = 128;
 pub const LINE_COUNT: usize = (BLOCK_SIZE - 1) / (LINE_SIZE + 1);
 pub const BLOCK_CAPACITY: usize = LINE_COUNT * LINE_SIZE;
 pub const LINE_MARK_START: usize = BLOCK_CAPACITY;
+pub const BLOCK_MARK_OFFSET: usize = LINE_MARK_START + LINE_COUNT;
 pub const MAX_ALLOC_SIZE: usize = u32::MAX as usize;
 pub const SMALL_OBJECT_MIN: usize = 1;
 pub const SMALL_OBJECT_MAX: usize = LINE_SIZE;

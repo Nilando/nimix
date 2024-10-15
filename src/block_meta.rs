@@ -1,5 +1,5 @@
 use super::constants::{
-    BLOCK_SIZE, FREE_MARK, LINE_COUNT, LINE_MARK_START, LINE_SIZE,
+    BLOCK_SIZE, FREE_MARK, LINE_COUNT, LINE_MARK_START, LINE_SIZE, BLOCK_MARK_OFFSET
 };
 use super::size_class::SizeClass;
 use super::block::Block;
@@ -8,6 +8,7 @@ use std::num::NonZero;
 
 pub struct BlockMeta {
     lines: *const [AtomicU8; LINE_COUNT],
+    block_mark: *const AtomicU8,
 }
 
 impl BlockMeta {
@@ -18,8 +19,12 @@ impl BlockMeta {
     }
 
     pub unsafe fn from_block_ptr(ptr: *const u8) -> Self {
+        let lines = ptr.add(LINE_MARK_START) as *const [AtomicU8; LINE_COUNT];
+        let block_mark =  ptr.add(BLOCK_MARK_OFFSET) as *const AtomicU8;
+
         Self {
-            lines: ptr.add(LINE_MARK_START) as *const [AtomicU8; LINE_COUNT],
+            lines,
+            block_mark,
         }
     }
 
@@ -42,17 +47,21 @@ impl BlockMeta {
             self.set_line(line, mark.into());
         } else {
             let relative_end = relative_ptr + size as usize;
-            let end_line = (relative_end - 1) / LINE_SIZE;
+            let end_line = relative_end / LINE_SIZE;
 
             for i in line..end_line {
                 self.set_line(i, mark.into());
             }
         }
 
-        self.set_block(mark);
+        self.mark_block(mark);
     }
 
     pub fn free_unmarked(&self, mark: NonZero<u8>) {
+        if self.get_block_mark() != mark.into() {
+            self.free_block();
+        }
+
         for i in 0..LINE_COUNT {
             if self.get_line(i) != mark.into() {
                 self.set_line(i, FREE_MARK);
@@ -60,8 +69,12 @@ impl BlockMeta {
         }
     }
 
-    pub fn get_block(&self) -> u8 {
-        self.get_line(LINE_COUNT - 1)
+    pub fn get_block_mark(&self) -> u8 {
+        unsafe { (&*self.block_mark).load(Ordering::Relaxed) }
+    }
+
+    pub fn mark_block(&self, mark: NonZero<u8>) {
+        unsafe { (&*self.block_mark).store(mark.into(), Ordering::Relaxed) }
     }
 
     fn get_line(&self, index: usize) -> u8 {
@@ -73,16 +86,16 @@ impl BlockMeta {
     }
 
     fn mark_at(&self, line: usize) -> &AtomicU8 {
-        debug_assert!(line < LINE_COUNT);
-
         unsafe { &(&*self.lines)[line] }
     }
 
-    pub fn set_block(&self, mark: NonZero<u8>) {
-        self.set_line(LINE_COUNT - 1, mark.into())
+    fn free_block(&self) {
+        unsafe { (&*self.block_mark).store(FREE_MARK, Ordering::Relaxed) }
     }
 
     pub fn reset(&self) {
+        self.free_block();
+
         for i in 0..LINE_COUNT {
             self.set_line(i, FREE_MARK);
         }
@@ -140,8 +153,8 @@ mod tests {
         let block = Block::default().unwrap();
         let meta = BlockMeta::new(&block);
 
-        meta.set_block(NonZero::new(1).unwrap());
-        let got = meta.get_block();
+        meta.mark_block(NonZero::new(1).unwrap());
+        let got = meta.get_block_mark();
 
         assert_eq!(got, 1);
     }

@@ -131,6 +131,7 @@ fn fuzz() {
 
         let bytes: f64 = get_size() as f64;
         let mb = (bytes / 1024.0) / 1024.0;
+
         println!("HEAP SIZE: {:.2} mb", mb);
     }
 }
