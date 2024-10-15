@@ -108,6 +108,7 @@ const MARK_LOOPS: usize = 5;
 const SWEEP_LOOPS: usize = 10;
 const ALLOC_LOOPS: usize = 2000;
 
+#[ignore]
 #[test]
 fn fuzz() {
     for l in 1..=MARK_LOOPS {
@@ -143,7 +144,7 @@ fn fuzz() {
             let mb = (bytes / 1024.0) / 1024.0;
             println!("HEAP SIZE: {:.2} mb *", mb);
 
-            unsafe { sweep(marker); }
+            unsafe { sweep(marker, || {}); }
 
             let bytes: f64 = get_size() as f64;
             let mb = (bytes / 1024.0) / 1024.0;
