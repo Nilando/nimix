@@ -3,10 +3,11 @@ mod block;
 mod block_meta;
 mod block_store;
 mod bump_block;
-mod constants;
 mod error;
 mod large_block;
 mod size_class;
+
+pub mod constants;
 
 use alloc_head::AllocHead;
 use block_meta::BlockMeta;
@@ -21,7 +22,6 @@ pub use error::AllocError;
 std::thread_local!(static ALLOC_HEAD: AllocHead = AllocHead::new());
 
 pub unsafe fn alloc(layout: Layout) -> Result<*mut u8, AllocError> {
-    let size_class = SizeClass::get_for_size(layout.size())?;
     let ptr = ALLOC_HEAD.with(|head| head.alloc(layout))?;
 
     Ok(ptr as *mut u8)

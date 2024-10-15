@@ -38,7 +38,7 @@ impl BlockMeta {
         let relative_ptr = addr % BLOCK_SIZE;
         let line = relative_ptr / LINE_SIZE;
 
-        // debug_assert!(size_class != SizeClass::Large);
+        debug_assert!(size_class != SizeClass::Large);
 
         if size_class == SizeClass::Small {
             self.set_line(line, mark.into());

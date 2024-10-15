@@ -17,3 +17,4 @@ pub const MEDIUM_OBJECT_MAX: usize = BLOCK_CAPACITY;
 pub const LARGE_OBJECT_MIN: usize = MEDIUM_OBJECT_MAX + 1;
 pub const LARGE_OBJECT_MAX: usize = MAX_ALLOC_SIZE;
 pub const MAX_FREE_BLOCKS: usize = 100;
+pub const RECYCLE_HOLE_MIN: usize = LINE_SIZE * 5;

@@ -1,6 +1,6 @@
 use super::bump_block::BumpBlock;
 use super::error::AllocError;
-use super::constants::{BLOCK_SIZE, MAX_FREE_BLOCKS};
+use super::constants::{BLOCK_SIZE, MAX_FREE_BLOCKS, RECYCLE_HOLE_MIN};
 use super::large_block::LargeBlock;
 use std::alloc::Layout;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -117,7 +117,7 @@ impl BlockStore {
             block.reset_hole(mark);
 
             if block.is_marked(mark) {
-                if block.current_hole_size() != 0 {
+                if block.current_hole_size() >= RECYCLE_HOLE_MIN {
                     new_recycle.push(block);
                 } else {
                     new_rest.push(block);
