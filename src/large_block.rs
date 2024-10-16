@@ -1,8 +1,7 @@
 use super::block::Block;
 use super::error::AllocError;
-use super::constants::LARGE_OBJECT_MIN;
+use super::constants::{FREE_MARK, LARGE_OBJECT_MIN};
 
-use std::ptr::write;
 use std::alloc::Layout;
 use std::num::NonZero;
 use std::sync::atomic::{AtomicU8, Ordering};
@@ -19,7 +18,13 @@ impl LargeBlock {
         let mark_layout = Layout::new::<AtomicU8>();
         let (obj_mark_layout, mark_offset) = obj_layout.extend(mark_layout)?;
         let block = Block::new(obj_mark_layout.pad_to_align())?;
-        let mark = unsafe { block.as_ptr().add(mark_offset) } as *const AtomicU8;
+        let mark = unsafe { 
+            let mark = block.as_ptr().add(mark_offset) as *const AtomicU8;
+            (&*mark).store(FREE_MARK, Ordering::Relaxed);
+            mark
+        };
+
+
         let large_block = Self {
             block,
             mark
@@ -54,6 +59,7 @@ impl LargeBlock {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::ptr::write;
 
     #[test]
     fn new_large_block() {
