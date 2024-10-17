@@ -63,9 +63,9 @@ impl Fuzzer {
         let mut rng = rand::thread_rng();
 
         for _ in 0..ALLOC_LOOPS {
-            let mut size = rng.gen_range(1..=2000);
+            let mut size = rng.gen_range(1..=4000);
 
-            if size == 2000 {
+            if size == 4000 {
                 size = 1024 * 20;
             }
 
@@ -126,12 +126,12 @@ fn fuzz() {
                 join_handles.push(jh);
             }
 
-            // sweep while fuzzers are marking!
-            unsafe { sweep(marker, || {}); }
-
             for jh in join_handles.into_iter() {
                 fuzzers.push(jh.join().unwrap());
             }
+
+            // sweep while fuzzers are marking!
+            unsafe { sweep(marker, || {}); }
         }
 
         let bytes: f64 = get_size() as f64;
