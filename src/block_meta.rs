@@ -91,7 +91,7 @@ impl BlockMeta {
         starting_at: usize,
         alloc_size: usize,
     ) -> Option<(usize, usize)> {
-        let mut count = 0;
+        let mut free_line_count = 0;
         let starting_line = starting_at / LINE_SIZE;
         let lines_required = alloc_size.div_ceil(LINE_SIZE);
         let mut end = starting_line;
@@ -100,23 +100,23 @@ impl BlockMeta {
             let line_mark = self.get_line(index);
 
             if line_mark == FREE_MARK {
-                count += 1;
+                free_line_count += 1;
 
-                if index == 0 && count >= lines_required {
+                if index == 0 && free_line_count >= lines_required {
                     let limit = index * LINE_SIZE;
                     let cursor = end * LINE_SIZE;
 
                     return Some((cursor, limit));
                 }
             } else {
-                if count > lines_required {
+                if free_line_count > lines_required {
                     let limit = (index + 2) * LINE_SIZE;
                     let cursor = end * LINE_SIZE;
 
                     return Some((cursor, limit));
                 }
 
-                count = 0;
+                free_line_count = 0;
                 end = index;
             }
         }
