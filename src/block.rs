@@ -45,6 +45,6 @@ impl Block {
 
 impl Drop for Block {
     fn drop(&mut self) {
-        unsafe { dealloc(self.ptr.as_ptr(), self.layout) }
+        // unsafe { dealloc(self.ptr.as_ptr(), self.layout) }
     }
 }
