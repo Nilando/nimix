@@ -66,7 +66,7 @@ impl Fuzzer {
             let mut size = rng.gen_range(1..=2000);
 
             if size == 2000 {
-                size = 1024 * 16 + 1;
+                size = 1024 * 20;
             }
 
             let value = Value::new(size);
@@ -74,7 +74,7 @@ impl Fuzzer {
             unsafe {
                 let power = rng.gen_range(0..=8);
                 let align = 2usize.pow(power);
-                let layout = Layout::from_size_align_unchecked(size, align);
+                let layout = Layout::from_size_align(size, align).unwrap();
                 let dest = alloc(layout).unwrap();
 
                 for _ in 0..size {

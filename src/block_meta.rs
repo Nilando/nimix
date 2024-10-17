@@ -106,12 +106,16 @@ impl BlockMeta {
                     let limit = index * LINE_SIZE;
                     let cursor = end * LINE_SIZE;
 
+                    debug_assert!(cursor > limit);
+
                     return Some((cursor, limit));
                 }
             } else {
                 if free_line_count > lines_required {
                     let limit = (index + 2) * LINE_SIZE;
                     let cursor = end * LINE_SIZE;
+
+                    debug_assert!(cursor > limit);
 
                     return Some((cursor, limit));
                 }

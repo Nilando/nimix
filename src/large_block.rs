@@ -5,6 +5,7 @@ use super::constants::{FREE_MARK, LARGE_OBJECT_MIN};
 use std::alloc::Layout;
 use std::num::NonZero;
 use std::sync::atomic::{AtomicU8, Ordering};
+use std::ptr::write;
 
 pub struct LargeBlock {
     block: Block,
@@ -17,13 +18,13 @@ impl LargeBlock {
 
         let mark_layout = Layout::new::<AtomicU8>();
         let (obj_mark_layout, mark_offset) = obj_layout.extend(mark_layout)?;
-        let block = Block::new(obj_mark_layout.pad_to_align())?;
+        let block_layout = obj_mark_layout.pad_to_align();
+        let block = Block::new(block_layout)?;
         let mark = unsafe { 
             let mark = block.as_ptr().add(mark_offset) as *const AtomicU8;
-            (&*mark).store(FREE_MARK, Ordering::Relaxed);
+            write(mark as *mut AtomicU8, AtomicU8::new(FREE_MARK));
             mark
         };
-
 
         let large_block = Self {
             block,
@@ -38,13 +39,13 @@ impl LargeBlock {
         let (_, mark_offset) = obj_layout.extend(mark_layout)?;
         let block_mark: *const AtomicU8 = ptr.add(mark_offset) as *const AtomicU8;
 
-        (&*block_mark).store(mark.into(), Ordering::Relaxed);
+        (&*block_mark).store(mark.into(), Ordering::SeqCst);
 
         Ok(())
     }
 
     pub fn is_marked(&self, mark: NonZero<u8>) -> bool {
-        unsafe { (&*self.mark).load(Ordering::Relaxed) == mark.into() }
+        unsafe { (&*self.mark).load(Ordering::SeqCst) == mark.into() }
     }
 
     pub fn get_size(&self) -> usize {

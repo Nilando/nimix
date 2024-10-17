@@ -56,6 +56,9 @@ impl BumpBlock {
 
                 let ptr = unsafe { self.block.as_ptr().add(self.cursor) };
 
+                debug_assert!(self.block.as_ptr() as usize <= ptr as usize);
+                debug_assert!(self.block.as_ptr() as usize + BLOCK_CAPACITY >= ptr as usize + layout.size());
+
                 return Some(ptr);
             }
 

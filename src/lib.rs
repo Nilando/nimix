@@ -18,7 +18,7 @@ use block_store::BLOCK_STORE;
 
 pub use error::AllocError;
 
-std::thread_local!(static ALLOC_HEAD: AllocHead = AllocHead::new());
+std::thread_local!(static ALLOC_HEAD: AllocHead = const { AllocHead::new() });
 
 pub unsafe fn alloc(layout: Layout) -> Result<*mut u8, AllocError> {
     let ptr = ALLOC_HEAD.with(|head| head.alloc(layout))?;
@@ -33,11 +33,11 @@ pub unsafe fn mark(ptr: *mut u8, layout: Layout, mark: NonZero<u8>) -> Result<()
         let meta = BlockMeta::from_ptr(ptr);
 
         meta.mark(ptr, layout.size() as u32, size_class, mark.into());
-    } else {
-        LargeBlock::mark(ptr, layout, mark.into())?;
-    }
 
-    Ok(())
+        Ok(())
+    } else {
+        LargeBlock::mark(ptr, layout, mark.into())
+    }
 }
 
 pub unsafe fn sweep(mark: NonZero<u8>, cb: impl FnOnce()) {

@@ -31,20 +31,17 @@ impl Block {
     }
 
     fn alloc_block(layout: Layout) -> Result<NonNull<u8>, AllocError> {
-        unsafe {
-            let ptr = alloc(layout);
+        let ptr = unsafe { alloc(layout) };
 
-            if ptr.is_null() {
-                Err(AllocError::OOM)
-            } else {
-                Ok(NonNull::new_unchecked(ptr))
-            }
+        match NonNull::new(ptr) {
+            Some(ptr) => Ok(ptr),
+            None => Err(AllocError::OOM),
         }
     }
 }
 
 impl Drop for Block {
     fn drop(&mut self) {
-        // unsafe { dealloc(self.ptr.as_ptr(), self.layout) }
+        unsafe { dealloc(self.ptr.as_ptr(), self.layout) }
     }
 }

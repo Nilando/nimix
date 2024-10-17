@@ -15,10 +15,11 @@ pub static BLOCK_STORE: LazyLock<BlockStore> = LazyLock::new(|| BlockStore::new(
 
 pub struct BlockStore {
     block_count: AtomicUsize,
-    free: Mutex<Vec<BumpBlock>>,
-    recycle: Mutex<Vec<BumpBlock>>,
+
     rest: Mutex<Vec<BumpBlock>>,
     large: Mutex<Vec<LargeBlock>>,
+    recycle: Mutex<Vec<BumpBlock>>,
+    free: Mutex<Vec<BumpBlock>>,
 }
 
 impl BlockStore {
@@ -129,19 +130,11 @@ impl BlockStore {
             }
         }
 
-        *rest = new_rest;
-        *recycle = new_recycle;
-        drop(rest);
-        drop(recycle);
-
-        while let Some(block) = large.pop() {
-            if block.is_marked(mark) {
-                new_large.push(block);
+        while let Some(large_block) = large.pop() {
+            if large_block.is_marked(mark) {
+                new_large.push(large_block);
             }
         }
-
-        *large = new_large;
-        drop(large);
 
         let mut free = self.free.lock().unwrap();
         while let Some(free_block) = new_free.pop() {
@@ -151,6 +144,14 @@ impl BlockStore {
                 break;
             }
         }
+
+        assert!(rest.is_empty());
+        assert!(recycle.is_empty());
+        assert!(large.is_empty());
+
+        *rest = new_rest;
+        *recycle = new_recycle;
+        *large = new_large;
 
         self.block_count.fetch_sub(new_free.len(), Ordering::SeqCst);
     }
