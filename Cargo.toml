@@ -11,3 +11,7 @@ description = "An allocator designed to be use by a GC"
 
 [dev-dependencies]
 rand = "0.8.5"
+
+[profile.release-with-debug]
+inherits = "release"
+debug = true
