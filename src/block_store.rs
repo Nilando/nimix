@@ -1,6 +1,6 @@
 use super::bump_block::BumpBlock;
 use super::error::AllocError;
-use super::constants::{BLOCK_SIZE, MAX_FREE_BLOCKS, RECYCLE_HOLE_MIN};
+use super::constants::{BLOCK_SIZE, MAX_FREE_BLOCKS, RECYCLE_HOLE_MIN, LARGE_OBJECT_MIN};
 use super::large_block::LargeBlock;
 use std::alloc::Layout;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -16,6 +16,7 @@ pub static BLOCK_STORE: LazyLock<BlockStore> = LazyLock::new(|| BlockStore::new(
 pub struct BlockStore {
     block_count: AtomicUsize,
 
+    // TODO use channels instead of mutexes
     rest: Mutex<Vec<BumpBlock>>,
     large: Mutex<Vec<LargeBlock>>,
     recycle: Mutex<Vec<BumpBlock>>,
@@ -82,6 +83,8 @@ impl BlockStore {
 
     // large objects are stored with a single byte of meta info to store their mark
     pub fn create_large(&self, layout: Layout) -> Result<*const u8, AllocError> {
+        assert!(layout.size() >= LARGE_OBJECT_MIN);
+
         let large_block = LargeBlock::new(layout)?;
         let ptr = large_block.as_ptr();
 
@@ -105,6 +108,15 @@ impl BlockStore {
         let mut new_recycle = vec![];
         let mut new_large = vec![];
         let mut new_free = vec![];
+
+        while let Some(large_block) = large.pop() {
+            if large_block.is_marked(mark) {
+                new_large.push(large_block);
+            }
+        }
+
+        *large = new_large;
+        drop(large);
 
         while let Some(mut block) = recycle.pop() {
             block.reset_hole(mark);
@@ -130,11 +142,10 @@ impl BlockStore {
             }
         }
 
-        while let Some(large_block) = large.pop() {
-            if large_block.is_marked(mark) {
-                new_large.push(large_block);
-            }
-        }
+        *rest = new_rest;
+        *recycle = new_recycle;
+        drop(rest);
+        drop(recycle);
 
         let mut free = self.free.lock().unwrap();
         while let Some(free_block) = new_free.pop() {
@@ -145,19 +156,11 @@ impl BlockStore {
             }
         }
 
-        assert!(rest.is_empty());
-        assert!(recycle.is_empty());
-        assert!(large.is_empty());
-
-        *rest = new_rest;
-        *recycle = new_recycle;
-        *large = new_large;
-
-        self.block_count.fetch_sub(new_free.len(), Ordering::SeqCst);
+        self.block_count.fetch_sub(new_free.len(), Ordering::Relaxed);
     }
 
     fn new_block(&self) -> Result<BumpBlock, AllocError> {
-        self.block_count.fetch_add(1, Ordering::SeqCst);
+        self.block_count.fetch_add(1, Ordering::Relaxed);
         BumpBlock::new()
     }
 }

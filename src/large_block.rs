@@ -39,13 +39,13 @@ impl LargeBlock {
         let (_, mark_offset) = obj_layout.extend(mark_layout)?;
         let block_mark: *const AtomicU8 = ptr.add(mark_offset) as *const AtomicU8;
 
-        (&*block_mark).store(mark.into(), Ordering::SeqCst);
+        (&*block_mark).store(mark.into(), Ordering::Relaxed);
 
         Ok(())
     }
 
     pub fn is_marked(&self, mark: NonZero<u8>) -> bool {
-        unsafe { (&*self.mark).load(Ordering::SeqCst) == mark.into() }
+        unsafe { (&*self.mark).load(Ordering::Relaxed) == mark.into() }
     }
 
     pub fn get_size(&self) -> usize {
