@@ -6,12 +6,6 @@ use std::alloc::Layout;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
 use std::num::NonZero;
-use std::sync::LazyLock;
-
-unsafe impl Send for BlockStore {}
-unsafe impl Sync for BlockStore {}
-
-pub static BLOCK_STORE: LazyLock<BlockStore> = LazyLock::new(|| BlockStore::new());
 
 pub struct BlockStore {
     block_count: AtomicUsize,

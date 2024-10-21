@@ -1,5 +1,4 @@
 use criterion::{
-    black_box, 
     criterion_group, 
     criterion_main, 
     Criterion, 
@@ -7,9 +6,8 @@ use criterion::{
     BenchmarkId
 };
 
-use nimix::{alloc, sweep};
+use nimix::Heap;
 use std::alloc::Layout;
-use std::iter;
 use std::num::NonZero;
 
 fn alloc_sizes(c: &mut Criterion) {
@@ -17,12 +15,12 @@ fn alloc_sizes(c: &mut Criterion) {
 
     for size in [1, 2, 4, 8, 16, 32, 64, 128].iter() {
         group.throughput(Throughput::Bytes(*size as u64));
+        let heap = Heap::new();
+
         group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, &size| {
             let layout = Layout::from_size_align(size, 1).unwrap();
-
-            b.iter(|| unsafe { alloc(layout) });
-
-            unsafe { sweep(NonZero::new(1u8).unwrap(), || {}) };
+            b.iter(|| unsafe { heap.alloc(layout) });
+            unsafe { heap.sweep(NonZero::new(1u8).unwrap(), || {}) };
         });
     }
 
