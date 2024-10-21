@@ -1,13 +1,16 @@
-use super::block_store::BLOCK_STORE;
+use super::block_store::BlockStore;
 use super::bump_block::BumpBlock;
 use super::error::AllocError;
 use super::size_class::SizeClass;
 use std::alloc::Layout;
 use std::cell::Cell;
+use std::sync::Arc;
+use std::num::NonZero;
 
 pub struct AllocHead {
     head: Cell<Option<BumpBlock>>,
     overflow: Cell<Option<BumpBlock>>,
+    store: Arc<BlockStore>,
 }
 
 impl Drop for AllocHead {
@@ -16,22 +19,22 @@ impl Drop for AllocHead {
     }
 }
 
-impl AllocHead {
-    pub const fn new() -> Self {
+impl Clone for AllocHead {
+    fn clone(&self) -> Self {
         Self {
             head: Cell::new(None),
             overflow: Cell::new(None),
+            store: self.store.clone()
         }
     }
+}
 
-    // maybe this could be public?
-    pub fn flush(&self)  {
-        if let Some(head) = self.head.take() {
-            BLOCK_STORE.recycle(head);
-        }
-
-        if let Some(overflow) = self.overflow.take() {
-            BLOCK_STORE.recycle(overflow);
+impl AllocHead {
+    pub const fn new(store: Arc<BlockStore>) -> Self {
+        Self {
+            head: Cell::new(None),
+            overflow: Cell::new(None),
+            store,
         }
     }
 
@@ -41,8 +44,16 @@ impl AllocHead {
         match size_class {
             SizeClass::Small => self.small_alloc(layout),
             SizeClass::Medium => self.medium_alloc(layout),
-            SizeClass::Large => BLOCK_STORE.create_large(layout),
+            SizeClass::Large => self.store.create_large(layout),
         }
+    }
+
+    pub unsafe fn sweep(&self, mark: NonZero<u8>, cb: impl FnOnce()) {
+        self.store.sweep(mark.into(), cb);
+    }
+
+    pub fn get_size(&self) -> usize {
+        self.store.get_size()
     }
 
     fn small_alloc(&self, layout: Layout) -> Result<*const u8, AllocError> {
@@ -68,27 +79,27 @@ impl AllocHead {
     fn get_new_head(&self) -> Result<(), AllocError> {
         let new_head = match self.overflow.take() {
             Some(block) => block,
-            None => BLOCK_STORE.get_head()?,
+            None => self.store.get_head()?,
         };
 
         let rest_block = self.head.take();
         self.head.set(Some(new_head));
 
         if let Some(block) = rest_block {
-            BLOCK_STORE.rest(block);
+            self.store.rest(block);
         }
 
         Ok(())
     }
 
     fn get_new_overflow(&self) -> Result<(), AllocError> {
-        let new_overflow = BLOCK_STORE.get_overflow()?;
+        let new_overflow = self.store.get_overflow()?;
         let recycle_block = self.overflow.take();
 
         self.overflow.set(Some(new_overflow));
 
         if let Some(block) = recycle_block {
-            BLOCK_STORE.recycle(block);
+            self.store.recycle(block);
         }
 
         Ok(())
@@ -113,6 +124,16 @@ impl AllocHead {
                 result
             }
             None => None,
+        }
+    }
+
+    fn flush(&self)  {
+        if let Some(head) = self.head.take() {
+            self.store.recycle(head);
+        }
+
+        if let Some(overflow) = self.overflow.take() {
+            self.store.recycle(overflow);
         }
     }
 }

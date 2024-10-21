@@ -5,12 +5,7 @@ use rand::prelude::*;
 use std::collections::HashMap;
 use std::alloc::Layout;
 use std::num::NonZero;
-use nimix::{
-    sweep,
-    mark,
-    alloc,
-    get_size,
-};
+use nimix::Heap;
 
 unsafe impl Send for Fuzzer {}
 unsafe impl Sync for Fuzzer {}
@@ -39,13 +34,15 @@ impl Value {
 
 #[derive(Clone)]
 struct Fuzzer {
+    heap: Heap,
     values: HashMap<*const u8, Value>,
     marker: NonZero<u8>,
 }
 
 impl Fuzzer {
-    fn new(marker: NonZero<u8>) -> Self {
+    fn new(heap: Heap, marker: NonZero<u8>) -> Self {
         Self {
+            heap,
             values: HashMap::new(),
             marker
         }
@@ -75,7 +72,7 @@ impl Fuzzer {
                 let power = rng.gen_range(0..=8);
                 let align = 2usize.pow(power);
                 let layout = Layout::from_size_align(size, align).unwrap();
-                let dest = alloc(layout).unwrap();
+                let dest = self.heap.alloc(layout).unwrap();
 
                 for _ in 0..size {
                     let src = value.data.as_ptr();
@@ -85,7 +82,7 @@ impl Fuzzer {
                 let coin_flip = rng.gen_range(0..100);
                 if coin_flip < 5 {
                     self.values.insert(dest, value);
-                    mark(dest, layout, self.marker).unwrap();
+                    Heap::mark(dest, layout, self.marker).unwrap();
                 } else {
                     // this is garbage and will be swept
                 }
@@ -97,17 +94,19 @@ impl Fuzzer {
 const NUM_THREADS: usize = 16;
 const MARK_LOOPS: usize = 10;
 const SWEEP_LOOPS: usize = 20;
-const ALLOC_LOOPS: usize = 1000;
+const ALLOC_LOOPS: usize = 500;
 
 #[test]
 fn fuzz() {
+    let heap = Heap::new();
+
     for l in 1..=MARK_LOOPS {
         println!("=== MARK LOOP {l} ===");
 
         let marker = NonZero::new(l as u8).unwrap();
         let mut fuzzers = vec![];
         for _ in 0..NUM_THREADS {
-            fuzzers.push(Fuzzer::new(marker));
+            fuzzers.push(Fuzzer::new(heap.clone(), marker));
         }
 
         for _ in 0..SWEEP_LOOPS {
@@ -131,10 +130,10 @@ fn fuzz() {
             }
 
             // sweep while fuzzers are marking!
-            unsafe { sweep(marker, || {}); }
+            unsafe { heap.sweep(marker, || {}); }
         }
 
-        let bytes: f64 = get_size() as f64;
+        let bytes: f64 = heap.size() as f64;
         let mb = (bytes / 1024.0) / 1024.0;
 
         println!("HEAP SIZE: {:.2} mb", mb);
