@@ -142,12 +142,10 @@ impl BlockStore {
         drop(recycle);
 
         let mut free = self.free.lock().unwrap();
-        while let Some(free_block) = new_free.pop() {
-            if free.len() < MAX_FREE_BLOCKS {
-                free.push(free_block);
-            } else {
-                break;
-            }
+        while free.len() < MAX_FREE_BLOCKS && !new_free.is_empty() {
+            let free_block = new_free.pop().unwrap();
+
+            free.push(free_block);
         }
 
         self.block_count.fetch_sub(new_free.len(), Ordering::Relaxed);
