@@ -1,5 +1,4 @@
 use super::block::Block;
-use super::block_meta::BlockMeta;
 use super::constants::{BLOCK_CAPACITY, SMALL_OBJECT_MIN};
 use super::error::AllocError;
 use std::alloc::Layout;
@@ -8,35 +7,31 @@ use std::num::NonZero;
 pub struct BumpBlock {
     cursor: usize,
     limit: usize,
-    block: Block,
-    meta: BlockMeta,
+    block: Box<Block>
 }
 
 impl BumpBlock {
     pub fn new() -> Result<BumpBlock, AllocError> {
-        let block = Block::default()?;
-        let meta = BlockMeta::new(&block);
+        let block = Block::alloc()?;
         let bump_block = BumpBlock {
             cursor: BLOCK_CAPACITY,
             limit: 0,
             block,
-            meta
         };
 
         Ok(bump_block)
     }
 
     pub fn reset_hole(&mut self, mark: NonZero<u8>) {
-        self.meta.free_unmarked(mark);
+        self.block.free_unmarked(mark);
 
-        if self.meta.get_block_mark() != mark.into() {
+        if self.block.get_mark() != mark.into() {
             self.cursor = BLOCK_CAPACITY;
             self.limit = 0;
             return;
         }
 
-        if let Some((cursor, limit)) = self
-            .meta
+        if let Some((cursor, limit)) = self.block
             .find_next_available_hole(BLOCK_CAPACITY, SMALL_OBJECT_MIN)
         {
             self.cursor = cursor;
@@ -54,16 +49,12 @@ impl BumpBlock {
             if self.limit <= next {
                 self.cursor = next;
 
-                let ptr = unsafe { self.block.as_ptr().add(self.cursor) };
-
-                debug_assert!(self.block.as_ptr() as usize <= ptr as usize);
-                debug_assert!(self.block.as_ptr() as usize + BLOCK_CAPACITY >= ptr as usize + layout.size());
+                let ptr = self.block.get_data_idx(self.cursor) as *const u8;
 
                 return Some(ptr);
             }
 
-            if let Some((cursor, limit)) = self
-                .meta
+            if let Some((cursor, limit)) = self.block
                 .find_next_available_hole(self.limit, layout.size())
             {
                 self.cursor = cursor;
@@ -79,7 +70,7 @@ impl BumpBlock {
     }
 
     pub fn is_marked(&self, mark: NonZero<u8>) -> bool {
-        self.meta.get_block_mark() == mark.into()
+        self.block.get_mark() == mark.into()
     }
 }
 

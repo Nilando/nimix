@@ -1,6 +1,5 @@
 mod alloc_head;
 mod block;
-mod block_meta;
 mod block_store;
 mod bump_block;
 mod error;
@@ -9,7 +8,6 @@ mod size_class;
 mod constants;
 
 use alloc_head::AllocHead;
-use block_meta::BlockMeta;
 use block_store::BlockStore;
 use large_block::LargeBlock;
 use size_class::SizeClass;
@@ -18,6 +16,9 @@ use std::alloc::Layout;
 use std::sync::Arc;
 
 pub use error::AllocError;
+
+use crate::block::Block;
+use crate::constants::{BLOCK_CAPACITY, BLOCK_SIZE, META_CAPACITY};
 
 #[derive(Clone)]
 pub struct Heap {
@@ -50,9 +51,10 @@ impl Heap {
         let size_class =  SizeClass::get_for_size(layout.size())?;
 
         if size_class != SizeClass::Large {
-            let meta = BlockMeta::from_ptr(ptr);
+            let block = Block::from_ptr(ptr);
+            let idx = (ptr as usize % BLOCK_SIZE) - META_CAPACITY;
 
-            meta.mark(ptr, layout.size() as u32, size_class, mark.into());
+            block.mark_object(idx, layout.size() as u32, size_class, mark.into());
 
             Ok(())
         } else {

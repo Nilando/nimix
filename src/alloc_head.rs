@@ -48,7 +48,7 @@ impl AllocHead {
         }
     }
 
-    pub unsafe fn sweep(&self, mark: NonZero<u8>, cb: impl FnOnce()) {
+    pub fn sweep(&self, mark: NonZero<u8>, cb: impl FnOnce()) {
         self.store.sweep(mark.into(), cb);
     }
 

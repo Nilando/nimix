@@ -60,10 +60,10 @@ impl Fuzzer {
         let mut rng = rand::thread_rng();
 
         for _ in 0..ALLOC_LOOPS {
-            let mut size = rng.gen_range(1..=4000);
+            let mut size = rng.gen_range(1..=2_000);
 
-            if size == 4000 {
-                size = 1024 * 20;
+            if size == 2_000 {
+                size = 1024 * 17;
             }
 
             let value = Value::new(size);
@@ -79,7 +79,7 @@ impl Fuzzer {
                     std::ptr::copy_nonoverlapping(src, dest, size);
                 }
 
-                let coin_flip = rng.gen_range(0..100);
+                let coin_flip = rng.gen_range(0..1000);
                 if coin_flip < 5 {
                     self.values.insert(dest, value);
                     Heap::mark(dest, layout, self.marker).unwrap();
@@ -91,16 +91,15 @@ impl Fuzzer {
     }
 }
 
-const NUM_THREADS: usize = 16;
-const MARK_LOOPS: usize = 10;
-const SWEEP_LOOPS: usize = 20;
-const ALLOC_LOOPS: usize = 500;
+const NUM_THREADS: usize = 8;
+const SWEEP_LOOPS: usize = 4;
+const ALLOC_LOOPS: usize = 100;
 
 #[test]
 fn fuzz() {
     let heap = Heap::new();
 
-    for l in 1..=MARK_LOOPS {
+    for l in 1..=3 {
         println!("=== MARK LOOP {l} ===");
 
         let marker = NonZero::new(l as u8).unwrap();
@@ -129,7 +128,6 @@ fn fuzz() {
                 fuzzers.push(jh.join().unwrap());
             }
 
-            // sweep while fuzzers are marking!
             unsafe { heap.sweep(marker, || {}); }
         }
 

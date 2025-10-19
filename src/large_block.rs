@@ -1,14 +1,14 @@
-use super::block::Block;
 use super::error::AllocError;
 use super::constants::{FREE_MARK, LARGE_OBJECT_MIN};
 
-use std::alloc::Layout;
+use std::alloc::{Layout, alloc};
 use std::num::NonZero;
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::ptr::write;
 
 pub struct LargeBlock {
-    block: Block,
+    ptr: *mut u8,
+    size: usize,
     mark: *const AtomicU8
 }
 
@@ -18,20 +18,28 @@ impl LargeBlock {
 
         let mark_layout = Layout::new::<AtomicU8>();
         let (obj_mark_layout, mark_offset) = obj_layout.extend(mark_layout)?;
+
         let block_layout = obj_mark_layout.pad_to_align();
-        let block = Block::new(block_layout)?;
-        let mark = unsafe { 
-            let mark = block.as_ptr().add(mark_offset) as *const AtomicU8;
+        let size = block_layout.size();
+
+        unsafe {
+            let ptr = alloc(block_layout);
+
+            if ptr.is_null() {
+                return Err(AllocError::OOM);
+            }
+
+            let mark = ptr.add(mark_offset) as *const AtomicU8;
             write(mark as *mut AtomicU8, AtomicU8::new(FREE_MARK));
-            mark
-        };
 
-        let large_block = Self {
-            block,
-            mark
-        };
+            let large_block = Self {
+                ptr,
+                size, 
+                mark
+            };
 
-        Ok(large_block)
+            Ok(large_block)
+        }
     }
 
     pub unsafe fn mark(ptr: *const u8, obj_layout: Layout, mark: NonZero<u8>) -> Result<(), AllocError> {
@@ -49,11 +57,11 @@ impl LargeBlock {
     }
 
     pub fn get_size(&self) -> usize {
-        self.block.get_size()
+        self.size
     }
 
     pub fn as_ptr(&self) -> *const u8 {
-        self.block.as_ptr()
+        self.ptr
     }
 }
 
