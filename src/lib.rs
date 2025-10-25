@@ -18,7 +18,7 @@ use std::sync::Arc;
 pub use error::AllocError;
 
 use crate::block::Block;
-use crate::constants::{BLOCK_CAPACITY, BLOCK_SIZE, META_CAPACITY};
+use crate::constants::{BLOCK_SIZE, META_CAPACITY};
 
 #[derive(Clone)]
 pub struct Heap {
