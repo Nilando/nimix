@@ -53,7 +53,7 @@ impl LargeBlock {
     }
 
     pub fn is_marked(&self, mark: NonZero<u8>) -> bool {
-        unsafe { (&*self.mark).load(Ordering::Relaxed) == mark.into() }
+        unsafe { (&*self.mark).load(Ordering::Relaxed) == u8::from(mark) }
     }
 
     pub fn get_size(&self) -> usize {

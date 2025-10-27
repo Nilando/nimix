@@ -10,7 +10,6 @@ use alloc::vec;
 
 pub struct BlockStore {
     block_count: AtomicUsize,
-
     rest: AtomicStack<BumpBlock>,
     large: AtomicStack<LargeBlock>,
     recycle: AtomicStack<BumpBlock>,
@@ -88,17 +87,11 @@ impl BlockStore {
         Ok(ptr)
     }
 
-    // REFACTOR THIS: there needs to be a better story behind what this callback is
-    pub fn sweep<F>(&self, mark: NonZero<u8>, sweep_callback: F)
-    where
-        F: FnOnce()
-    {
+    pub fn sweep(&self, mark: NonZero<u8>) {
         // Drain all stacks to process during sweep
         let large_items = self.large.drain_to_vec();
         let recycle_items = self.recycle.drain_to_vec();
         let rest_items = self.rest.drain_to_vec();
-
-        sweep_callback();
 
         let mut new_rest = vec![];
         let mut new_recycle = vec![];

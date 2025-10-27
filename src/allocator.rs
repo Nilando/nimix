@@ -7,30 +7,20 @@ use core::cell::Cell;
 use alloc::sync::Arc;
 use core::num::NonZero;
 
-pub struct AllocHead {
+pub struct Allocator {
     head: Cell<Option<BumpBlock>>,
     overflow: Cell<Option<BumpBlock>>,
     store: Arc<BlockStore>,
 }
 
-impl Drop for AllocHead {
+impl Drop for Allocator {
     fn drop(&mut self) {
         self.flush()
     }
 }
 
-impl Clone for AllocHead {
-    fn clone(&self) -> Self {
-        Self {
-            head: Cell::new(None),
-            overflow: Cell::new(None),
-            store: self.store.clone()
-        }
-    }
-}
-
-impl AllocHead {
-    pub const fn new(store: Arc<BlockStore>) -> Self {
+impl Allocator {
+    pub(crate) fn new(store: Arc<BlockStore>) -> Self {
         Self {
             head: Cell::new(None),
             overflow: Cell::new(None),
@@ -38,7 +28,7 @@ impl AllocHead {
         }
     }
 
-    pub fn alloc(&self, layout: Layout) -> Result<*const u8, AllocError> {
+    pub unsafe fn alloc(&self, layout: Layout) -> Result<*const u8, AllocError> {
         let size_class = SizeClass::get_for_size(layout.size())?;
 
         match size_class {
@@ -46,14 +36,6 @@ impl AllocHead {
             SizeClass::Medium => self.medium_alloc(layout),
             SizeClass::Large => self.store.create_large(layout),
         }
-    }
-
-    pub fn sweep(&self, mark: NonZero<u8>, cb: impl FnOnce()) {
-        self.store.sweep(mark.into(), cb);
-    }
-
-    pub fn get_size(&self) -> usize {
-        self.store.get_size()
     }
 
     fn small_alloc(&self, layout: Layout) -> Result<*const u8, AllocError> {

@@ -6,7 +6,7 @@ use criterion::{
     BenchmarkId
 };
 
-use nimix::Heap;
+use nimix::{Allocator, Heap};
 use alloc::alloc::Layout;
 use core::num::NonZero;
 
@@ -16,11 +16,12 @@ fn alloc_sizes(c: &mut Criterion) {
     for size in [1, 2, 4, 8, 16, 32, 64, 128].iter() {
         group.throughput(Throughput::Bytes(*size as u64));
         let heap = Heap::new();
+        let allocator = Allocator::from(&heap);
 
         group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, &size| {
             let layout = Layout::from_size_align(size, 1).unwrap();
-            b.iter(|| unsafe { heap.alloc(layout) });
-            unsafe { heap.sweep(NonZero::new(1u8).unwrap(), || {}) };
+            b.iter(|| unsafe { allocator.alloc(layout) });
+            unsafe { heap.sweep(NonZero::new(1u8).unwrap()) };
         });
     }
 

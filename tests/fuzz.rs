@@ -9,10 +9,9 @@ use std::thread::spawn;
 use alloc::alloc::Layout;
 use core::num::NonZero;
 use core::ptr::copy_nonoverlapping;
-use nimix::Heap;
+use nimix::{Allocator, Heap};
 
 unsafe impl Send for Fuzzer {}
-unsafe impl Sync for Fuzzer {}
 
 #[derive(Clone)]
 struct Value {
@@ -36,17 +35,16 @@ impl Value {
     }
 }
 
-#[derive(Clone)]
 struct Fuzzer {
-    heap: Heap,
+    allocator: Allocator,
     values: HashMap<*const u8, Value>,
     marker: NonZero<u8>,
 }
 
 impl Fuzzer {
-    fn new(heap: Heap, marker: NonZero<u8>) -> Self {
+    fn new(allocator: Allocator, marker: NonZero<u8>) -> Self {
         Self {
-            heap,
+            allocator,
             values: HashMap::new(),
             marker
         }
@@ -76,17 +74,17 @@ impl Fuzzer {
                 let power = rng.gen_range(0..=8);
                 let align = 2usize.pow(power);
                 let layout = Layout::from_size_align(size, align).unwrap();
-                let dest = self.heap.alloc(layout).unwrap();
+                let dest = self.allocator.alloc(layout).unwrap();
 
                 for _ in 0..size {
                     let src = value.data.as_ptr();
-                    copy_nonoverlapping(src, dest, size);
+                    copy_nonoverlapping(src, dest as *mut _, size);
                 }
 
                 let coin_flip = rng.gen_range(0..1000);
                 if coin_flip < 5 {
                     self.values.insert(dest, value);
-                    Heap::mark(dest, layout, self.marker).unwrap();
+                    nimix::mark(dest, layout, self.marker).unwrap();
                 } else {
                     // this is garbage and will be swept
                 }
@@ -109,7 +107,8 @@ fn fuzz() {
         let marker = NonZero::new(l as u8).unwrap();
         let mut fuzzers = vec![];
         for _ in 0..NUM_THREADS {
-            fuzzers.push(Fuzzer::new(heap.clone(), marker));
+            let a = Allocator::from(&heap);
+            fuzzers.push(Fuzzer::new(a, marker));
         }
 
         for _ in 0..SWEEP_LOOPS {
@@ -132,7 +131,7 @@ fn fuzz() {
                 fuzzers.push(jh.join().unwrap());
             }
 
-            unsafe { heap.sweep(marker, || {}); }
+            unsafe { heap.sweep(marker); }
         }
 
         let bytes: f64 = heap.size() as f64;
