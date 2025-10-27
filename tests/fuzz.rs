@@ -1,10 +1,14 @@
 // The fuzzer bascially keeps an in memory copy of all values
 //
 // And does multi threaded mutation of the graph
+extern crate alloc;
+
 use rand::prelude::*;
 use std::collections::HashMap;
-use std::alloc::Layout;
-use std::num::NonZero;
+use std::thread::spawn;
+use alloc::alloc::Layout;
+use core::num::NonZero;
+use core::ptr::copy_nonoverlapping;
 use nimix::Heap;
 
 unsafe impl Send for Fuzzer {}
@@ -76,7 +80,7 @@ impl Fuzzer {
 
                 for _ in 0..size {
                     let src = value.data.as_ptr();
-                    std::ptr::copy_nonoverlapping(src, dest, size);
+                    copy_nonoverlapping(src, dest, size);
                 }
 
                 let coin_flip = rng.gen_range(0..1000);
@@ -116,7 +120,7 @@ fn fuzz() {
 
                 fuzzer.assert();
                 
-                let jh = std::thread::spawn(move || {
+                let jh = spawn(move || {
                     fuzzer.alloc();
                     fuzzer
                 });

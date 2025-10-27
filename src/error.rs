@@ -1,4 +1,4 @@
-use std::alloc::LayoutError;
+use alloc::alloc::LayoutError;
 
 impl From<LayoutError> for AllocError {
     fn from(_: LayoutError) -> Self {

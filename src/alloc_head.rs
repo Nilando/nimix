@@ -2,10 +2,10 @@ use super::block_store::BlockStore;
 use super::bump_block::BumpBlock;
 use super::error::AllocError;
 use super::size_class::SizeClass;
-use std::alloc::Layout;
-use std::cell::Cell;
-use std::sync::Arc;
-use std::num::NonZero;
+use alloc::alloc::Layout;
+use core::cell::Cell;
+use alloc::sync::Arc;
+use core::num::NonZero;
 
 pub struct AllocHead {
     head: Cell<Option<BumpBlock>>,

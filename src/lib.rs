@@ -1,4 +1,8 @@
+#![no_std]
+extern crate alloc;
+
 mod alloc_head;
+mod atomic_stack;
 mod block;
 mod block_store;
 mod bump_block;
@@ -11,9 +15,9 @@ use alloc_head::AllocHead;
 use block_store::BlockStore;
 use large_block::LargeBlock;
 use size_class::SizeClass;
-use std::num::NonZero;
-use std::alloc::Layout;
-use std::sync::Arc;
+use core::num::NonZero;
+use alloc::alloc::Layout;
+use alloc::sync::Arc;
 
 pub use error::AllocError;
 

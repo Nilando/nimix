@@ -1,10 +1,10 @@
 use super::error::AllocError;
 use super::constants::{FREE_MARK, LARGE_OBJECT_MIN};
 
-use std::alloc::{Layout, alloc};
-use std::num::NonZero;
-use std::sync::atomic::{AtomicU8, Ordering};
-use std::ptr::write;
+use alloc::alloc::{Layout, alloc};
+use core::num::NonZero;
+use core::sync::atomic::{AtomicU8, Ordering};
+use core::ptr::write;
 
 pub struct LargeBlock {
     ptr: *mut u8,
@@ -68,7 +68,7 @@ impl LargeBlock {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::ptr::write;
+    use core::ptr::write;
 
     #[test]
     fn new_large_block() {

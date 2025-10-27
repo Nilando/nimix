@@ -2,9 +2,10 @@ use crate::constants::{BLOCK_CAPACITY, BLOCK_SIZE, FREE_MARK, LINE_COUNT, LINE_S
 use crate::size_class::SizeClass;
 
 use super::error::AllocError;
-use std::alloc::{alloc, Layout};
-use std::num::NonZero;
-use std::sync::atomic::{AtomicU8, Ordering};
+use alloc::alloc::{alloc, Layout};
+use core::num::NonZero;
+use core::sync::atomic::{AtomicU8, Ordering};
+use alloc::boxed::Box;
 
 #[repr(C)]
 pub struct Block {
@@ -153,7 +154,7 @@ mod tests {
 
     #[test]
     fn size_of_block() {
-        assert_eq!(std::mem::size_of::<Block>(), BLOCK_SIZE);
+        assert_eq!(core::mem::size_of::<Block>(), BLOCK_SIZE);
     }
 
     #[test]

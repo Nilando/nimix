@@ -2,29 +2,29 @@ use super::bump_block::BumpBlock;
 use super::error::AllocError;
 use super::constants::{BLOCK_SIZE, MAX_FREE_BLOCKS, RECYCLE_HOLE_MIN, LARGE_OBJECT_MIN};
 use super::large_block::LargeBlock;
-use std::alloc::Layout;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Mutex;
-use std::num::NonZero;
+use super::atomic_stack::AtomicStack;
+use alloc::alloc::Layout;
+use core::sync::atomic::{AtomicUsize, Ordering};
+use core::num::NonZero;
+use alloc::vec;
 
 pub struct BlockStore {
     block_count: AtomicUsize,
 
-    // TODO use channels instead of mutexes
-    rest: Mutex<Vec<BumpBlock>>,
-    large: Mutex<Vec<LargeBlock>>,
-    recycle: Mutex<Vec<BumpBlock>>,
-    free: Mutex<Vec<BumpBlock>>,
+    rest: AtomicStack<BumpBlock>,
+    large: AtomicStack<LargeBlock>,
+    recycle: AtomicStack<BumpBlock>,
+    free: AtomicStack<BumpBlock>,
 }
 
 impl BlockStore {
     pub fn new() -> Self {
         Self {
             block_count: AtomicUsize::new(0),
-            free: Mutex::new(vec![]),
-            recycle: Mutex::new(vec![]),
-            rest: Mutex::new(vec![]),
-            large: Mutex::new(vec![]),
+            free: AtomicStack::new(),
+            recycle: AtomicStack::new(),
+            rest: AtomicStack::new(),
+            large: AtomicStack::new(),
         }
     }
 
@@ -36,19 +36,19 @@ impl BlockStore {
     }
 
     pub fn rest(&self, block: BumpBlock) {
-        self.rest.lock().unwrap().push(block);
+        self.rest.push(block);
     }
 
     pub fn recycle(&self, block: BumpBlock) {
         if block.current_hole_size() >= RECYCLE_HOLE_MIN {
-            self.recycle.lock().unwrap().push(block);
+            self.recycle.push(block);
         } else {
             self.rest(block);
         }
     }
 
     pub fn get_head(&self) -> Result<BumpBlock, AllocError> {
-        if let Some(recycle_block) = self.recycle.lock().unwrap().pop() {
+        if let Some(recycle_block) = self.recycle.pop() {
             Ok(recycle_block)
         } else {
             self.get_overflow()
@@ -56,7 +56,7 @@ impl BlockStore {
     }
 
     pub fn get_overflow(&self) -> Result<BumpBlock, AllocError> {
-        if let Some(free_block) = self.free.lock().unwrap().pop() {
+        if let Some(free_block) = self.free.pop() {
             Ok(free_block)
         } else {
             self.new_block()
@@ -68,11 +68,12 @@ impl BlockStore {
     }
 
     pub fn count_large_space(&self) -> usize {
-        self.large
-            .lock()
-            .unwrap()
-            .iter()
-            .fold(0, |sum, block| sum + block.get_size())
+        // TODO: This is inefficient - drains and restores all items
+        // Consider tracking size atomically or using a traversable lock-free list
+        let items = self.large.drain_to_vec();
+        let total = items.iter().fold(0, |sum, block| sum + block.get_size());
+        self.large.push_from_iter(items);
+        total
     }
 
     // large objects are stored with a single byte of meta info to store their mark
@@ -82,19 +83,20 @@ impl BlockStore {
         let large_block = LargeBlock::new(layout)?;
         let ptr = large_block.as_ptr();
 
-        self.large.lock().unwrap().push(large_block);
+        self.large.push(large_block);
 
         Ok(ptr)
     }
 
     // REFACTOR THIS: there needs to be a better story behind what this callback is
-    pub fn sweep<F>(&self, mark: NonZero<u8>, sweep_callback: F) 
+    pub fn sweep<F>(&self, mark: NonZero<u8>, sweep_callback: F)
     where
         F: FnOnce()
     {
-        let mut rest = self.rest.lock().unwrap();
-        let mut large = self.large.lock().unwrap();
-        let mut recycle = self.recycle.lock().unwrap();
+        // Drain all stacks to process during sweep
+        let large_items = self.large.drain_to_vec();
+        let recycle_items = self.recycle.drain_to_vec();
+        let rest_items = self.rest.drain_to_vec();
 
         sweep_callback();
 
@@ -103,16 +105,16 @@ impl BlockStore {
         let mut new_large = vec![];
         let mut new_free = vec![];
 
-        while let Some(large_block) = large.pop() {
+        // Process large blocks
+        for large_block in large_items {
             if large_block.is_marked(mark) {
                 new_large.push(large_block);
             }
+            // Unmarked blocks are dropped
         }
 
-        *large = new_large;
-        drop(large);
-
-        while let Some(mut block) = recycle.pop() {
+        // Process recycle blocks
+        for mut block in recycle_items {
             block.reset_hole(mark);
 
             if block.is_marked(mark) {
@@ -122,7 +124,8 @@ impl BlockStore {
             }
         }
 
-        while let Some(mut block) = rest.pop() {
+        // Process rest blocks
+        for mut block in rest_items {
             block.reset_hole(mark);
 
             if block.is_marked(mark) {
@@ -136,19 +139,22 @@ impl BlockStore {
             }
         }
 
-        *rest = new_rest;
-        *recycle = new_recycle;
-        drop(rest);
-        drop(recycle);
+        // Push everything back
+        self.large.push_from_iter(new_large);
+        self.recycle.push_from_iter(new_recycle);
+        self.rest.push_from_iter(new_rest);
 
-        let mut free = self.free.lock().unwrap();
-        while free.len() < MAX_FREE_BLOCKS && !new_free.is_empty() {
-            let free_block = new_free.pop().unwrap();
-
-            free.push(free_block);
+        // Only keep MAX_FREE_BLOCKS in the free list
+        let mut kept_count = 0;
+        for free_block in new_free.into_iter() {
+            if kept_count < MAX_FREE_BLOCKS {
+                self.free.push(free_block);
+                kept_count += 1;
+            } else {
+                // Block is dropped, decrement count
+                self.block_count.fetch_sub(1, Ordering::Relaxed);
+            }
         }
-
-        self.block_count.fetch_sub(new_free.len(), Ordering::Relaxed);
     }
 
     fn new_block(&self) -> Result<BumpBlock, AllocError> {

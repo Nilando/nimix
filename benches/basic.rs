@@ -7,8 +7,8 @@ use criterion::{
 };
 
 use nimix::Heap;
-use std::alloc::Layout;
-use std::num::NonZero;
+use alloc::alloc::Layout;
+use core::num::NonZero;
 
 fn alloc_sizes(c: &mut Criterion) {
     let mut group = c.benchmark_group("alloc sizes");

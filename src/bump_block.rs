@@ -1,8 +1,9 @@
 use super::block::Block;
 use super::constants::{BLOCK_CAPACITY, SMALL_OBJECT_MIN};
 use super::error::AllocError;
-use std::alloc::Layout;
-use std::num::NonZero;
+use alloc::alloc::Layout;
+use core::num::NonZero;
+use alloc::boxed::Box;
 
 pub struct BumpBlock {
     cursor: usize,
