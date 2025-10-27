@@ -1,4 +1,4 @@
-use crate::constants::{BLOCK_CAPACITY, BLOCK_SIZE, FREE_MARK, LINE_COUNT, LINE_SIZE};
+use crate::constants::{BLOCK_CAPACITY, BLOCK_SIZE, FREE_MARK, LINE_COUNT, LINE_SIZE, META_CAPACITY};
 use crate::size_class::SizeClass;
 
 use super::error::AllocError;
@@ -15,13 +15,6 @@ pub struct Block {
 }
 
 impl Block {
-    pub unsafe fn from_ptr<'a>(ptr: *const u8) -> &'a Block {
-        let offset = (ptr as usize) % BLOCK_SIZE;
-        let block_ptr = ptr.byte_sub(offset);
-
-        &*(block_ptr as *const _)
-    }
-
     pub fn alloc() -> Result<Box<Block>, AllocError> {
         unsafe {
             let layout = Layout::from_size_align(BLOCK_SIZE, BLOCK_SIZE).unwrap();
@@ -82,23 +75,31 @@ impl Block {
         None
     }
 
-    pub fn mark_object(&self, idx: usize, size: u32, size_class: SizeClass, mark: NonZero<u8>) {
+    unsafe fn from_ptr<'a>(ptr: *const u8) -> &'a Block {
+        let offset = (ptr as usize) % BLOCK_SIZE;
+        let block_ptr = ptr.byte_sub(offset);
+
+        &*(block_ptr as *const _)
+    }
+
+    pub unsafe fn mark(ptr: *const u8, layout: Layout, size_class: SizeClass, mark: NonZero<u8>) {
+        let block = Block::from_ptr(ptr);
+        let idx = (ptr as usize % BLOCK_SIZE) - META_CAPACITY;
         let line = idx / LINE_SIZE;
 
-        debug_assert!(size_class != SizeClass::Large);
-
         if size_class == SizeClass::Small {
-            self.set_line(line, mark.into());
+            block.set_line(line, mark.into());
         } else {
+            let size = layout.size();
             let relative_end = (idx + size as usize) - 1;
             let end_line = relative_end / LINE_SIZE;
 
             for i in line..end_line {
-                self.set_line(i, mark.into());
+                block.set_line(i, mark.into());
             }
         }
 
-        self.mark_block(mark);
+        block.mark_block(mark);
     }
 
     pub fn free_unmarked(&self, mark: NonZero<u8>) {
