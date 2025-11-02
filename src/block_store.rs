@@ -8,6 +8,9 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 use core::num::NonZero;
 use alloc::vec;
 
+unsafe impl Send for BlockStore {}
+unsafe impl Sync for BlockStore {}
+
 pub struct BlockStore {
     block_count: AtomicUsize,
     rest: AtomicStack<BumpBlock>,
