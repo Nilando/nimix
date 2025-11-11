@@ -1,15 +1,21 @@
 use super::error::AllocError;
 use super::constants::{FREE_MARK, LARGE_OBJECT_MIN};
 
-use alloc::alloc::{Layout, alloc};
+use alloc::alloc::{alloc, dealloc, Layout};
 use core::num::NonZero;
 use core::sync::atomic::{AtomicU8, Ordering};
 use core::ptr::write;
 
 pub struct LargeBlock {
     ptr: *mut u8,
-    size: usize,
+    layout: Layout,
     mark: *const AtomicU8
+}
+
+impl Drop for LargeBlock {
+    fn drop(&mut self) {
+        unsafe { dealloc(self.ptr, self.layout) }
+    }
 }
 
 impl LargeBlock {
@@ -20,7 +26,6 @@ impl LargeBlock {
         let (obj_mark_layout, mark_offset) = obj_layout.extend(mark_layout)?;
 
         let block_layout = obj_mark_layout.pad_to_align();
-        let size = block_layout.size();
 
         unsafe {
             let ptr = alloc(block_layout);
@@ -34,7 +39,7 @@ impl LargeBlock {
 
             let large_block = Self {
                 ptr,
-                size, 
+                layout: block_layout,
                 mark
             };
 
@@ -57,7 +62,7 @@ impl LargeBlock {
     }
 
     pub fn get_size(&self) -> usize {
-        self.size
+        self.layout.size()
     }
 
     pub fn as_ptr(&self) -> *const u8 {

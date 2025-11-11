@@ -8,6 +8,7 @@ use core::sync::atomic::{AtomicU8, Ordering};
 use alloc::boxed::Box;
 
 #[repr(C)]
+#[repr(align(16384))]
 pub struct Block {
     mark: AtomicU8,
     lines: [AtomicU8; LINE_COUNT],
