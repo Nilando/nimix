@@ -3,12 +3,11 @@ use super::constants::{BLOCK_CAPACITY, SMALL_OBJECT_MIN};
 use super::error::AllocError;
 use alloc::alloc::Layout;
 use core::num::NonZero;
-use alloc::boxed::Box;
 
 pub struct BumpBlock {
     cursor: usize,
     limit: usize,
-    block: Box<Block>
+    block: Block
 }
 
 impl BumpBlock {
@@ -26,7 +25,7 @@ impl BumpBlock {
     pub fn reset_hole(&mut self, mark: NonZero<u8>) {
         self.block.free_unmarked(mark);
 
-        if self.block.get_mark() != mark.into() {
+        if self.block.get_mark() != u8::from(mark) {
             self.cursor = BLOCK_CAPACITY;
             self.limit = 0;
             return;
@@ -43,16 +42,30 @@ impl BumpBlock {
         }
     }
 
-    pub fn inner_alloc(&mut self, layout: Layout) -> Option<*const u8> {
+    pub fn inner_alloc(&mut self, layout: Layout) -> Option<*mut u8> {
+        let size = layout.size();
+
         loop {
-            let next = self.cursor.checked_sub(layout.size())? & !(layout.align() - 1);
+            // First, subtract the size to get the potential start position
+            let potential_start = self.cursor.checked_sub(size)?;
+
+            // Get the absolute address this would correspond to
+            let potential_ptr = self.block.get_data_ptr(potential_start);
+            let potential_addr = potential_ptr as usize;
+
+            // Align the absolute address downward
+            let aligned_addr = potential_addr & !(layout.align() - 1);
+
+            // Calculate the offset back into our block's coordinate system
+            let addr_adjustment = potential_addr - aligned_addr;
+            let next = potential_start.checked_sub(addr_adjustment)?;
 
             if self.limit <= next {
                 self.cursor = next;
 
-                let ptr = self.block.get_data_idx(self.cursor) as *const u8;
+                let ptr = self.block.get_data_ptr(self.cursor);
 
-                return Some(ptr);
+                return Some(ptr as *mut u8);
             }
 
             if let Some((cursor, limit)) = self.block
@@ -71,7 +84,7 @@ impl BumpBlock {
     }
 
     pub fn is_marked(&self, mark: NonZero<u8>) -> bool {
-        self.block.get_mark() == mark.into()
+        self.block.get_mark() == u8::from(mark)
     }
 }
 

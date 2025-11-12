@@ -75,11 +75,9 @@ impl Fuzzer {
                 let align = 2usize.pow(power);
                 let layout = Layout::from_size_align(size, align).unwrap();
                 let dest = self.allocator.alloc(layout).unwrap();
+                let src = value.data.as_ptr();
 
-                for _ in 0..size {
-                    let src = value.data.as_ptr();
-                    copy_nonoverlapping(src, dest as *mut _, size);
-                }
+                copy_nonoverlapping(src, dest as *mut _, size);
 
                 let coin_flip = rng.gen_range(0..1000);
                 if coin_flip < 5 {

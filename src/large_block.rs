@@ -7,8 +7,8 @@ use core::sync::atomic::{AtomicU8, Ordering};
 use core::ptr::write;
 
 pub struct LargeBlock {
-    ptr: *mut u8,
     layout: Layout,
+    ptr: *mut u8,
     mark: *const AtomicU8
 }
 
@@ -38,8 +38,8 @@ impl LargeBlock {
             write(mark as *mut AtomicU8, AtomicU8::new(FREE_MARK));
 
             let large_block = Self {
-                ptr,
                 layout: block_layout,
+                ptr,
                 mark
             };
 

@@ -3,34 +3,42 @@ use crate::size_class::SizeClass;
 
 use super::error::AllocError;
 use alloc::alloc::{alloc, Layout};
+use core::mem::ManuallyDrop;
 use core::num::NonZero;
 use core::sync::atomic::{AtomicU8, Ordering};
-use alloc::boxed::Box;
 
-#[repr(C)]
-#[repr(align(16384))]
 pub struct Block {
-    mark: AtomicU8,
-    lines: [AtomicU8; LINE_COUNT],
-    data: [u8; BLOCK_CAPACITY]
+    mark: *mut AtomicU8,
+    lines: *mut AtomicU8,
+    data: *mut u8,
 }
 
 impl Block {
-    pub fn alloc() -> Result<Box<Block>, AllocError> {
+    pub fn alloc() -> Result<Block, AllocError> {
         unsafe {
             let layout = Layout::from_size_align(BLOCK_SIZE, BLOCK_SIZE).unwrap();
 
-            let ptr = alloc(layout);
+            let ptr: *const u8 = alloc(layout);
 
             if ptr.is_null() {
                 return Err(AllocError::OOM);
             }
 
-            let box_block = Box::from_raw(ptr as *mut Block);
+            // Set up pointers to different regions within the single allocation
+            let mark_ptr = ptr as *mut AtomicU8;
+            let lines_ptr = ptr.add(core::mem::size_of::<AtomicU8>()) as *mut AtomicU8;
+            let data_ptr = ptr.add(META_CAPACITY) as *mut u8;
 
-            box_block.reset();
+            // Create the Block struct on the heap
+            let block = Block {
+                mark: mark_ptr,
+                lines: lines_ptr,
+                data: data_ptr,
+            };
 
-            Ok(box_block)
+            block.reset();
+
+            Ok(block)
         }
     }
 
@@ -76,11 +84,25 @@ impl Block {
         None
     }
 
-    unsafe fn from_ptr<'a>(ptr: *const u8) -> &'a Block {
+    unsafe fn from_ptr(ptr: *const u8) -> ManuallyDrop<Block> {
+        // Find the start of the block allocation by aligning down to BLOCK_SIZE
         let offset = (ptr as usize) % BLOCK_SIZE;
-        let block_ptr = ptr.byte_sub(offset);
+        let base_ptr = ptr.byte_sub(offset);
 
-        &*(block_ptr as *const _)
+        // Reconstruct the Block struct from the base pointer
+        // The memory layout is: mark (1 byte) | lines (LINE_COUNT bytes) | data (BLOCK_CAPACITY bytes)
+        let mark_ptr = base_ptr as *mut AtomicU8;
+        let lines_ptr = base_ptr.add(core::mem::size_of::<AtomicU8>()) as *mut AtomicU8;
+        let data_ptr = base_ptr.add(META_CAPACITY) as *mut u8;
+
+        // Create a Block on the heap and leak it to get a static reference
+        // This is safe because the Block struct doesn't own the memory - it just points to it
+        // The actual memory is managed separately through Block::alloc and Block::drop
+        ManuallyDrop::new(Block {
+            mark: mark_ptr,
+            lines: lines_ptr,
+            data: data_ptr,
+        })
     }
 
     pub unsafe fn mark(ptr: *const u8, layout: Layout, size_class: SizeClass, mark: NonZero<u8>) {
@@ -104,12 +126,12 @@ impl Block {
     }
 
     pub fn free_unmarked(&self, mark: NonZero<u8>) {
-        if self.get_mark() != mark.into() {
+        if self.get_mark() != u8::from(mark) {
             self.free_block();
         }
 
         for i in 0..LINE_COUNT {
-            if self.get_line(i) != mark.into() {
+            if self.get_line(i) != u8::from(mark) {
                 self.set_line(i, FREE_MARK);
             }
         }
@@ -123,41 +145,77 @@ impl Block {
         }
     }
 
-    pub fn get_data_idx(&self, idx: usize) -> &u8 {
-        &self.data[idx]
+    pub fn get_data_ptr(&self, idx: usize) -> *mut u8 {
+        assert!(idx < BLOCK_CAPACITY,
+            "get_data_ptr: allocation idx {} exceeds capacity {}",
+            idx, BLOCK_CAPACITY);
+
+        // Debug: validate data pointer is non-null
+        debug_assert!(!self.data.is_null(), "get_data_ptr: data pointer is null");
+
+        unsafe {
+            let ptr = self.data.add(idx);
+
+            // Debug: validate the computed pointer is reasonable
+            debug_assert!(!ptr.is_null(), "get_data_ptr: computed pointer is null");
+            debug_assert_eq!(
+                (ptr as usize).wrapping_sub(self.data as usize),
+                idx,
+                "get_data_ptr: pointer arithmetic mismatch"
+            );
+
+            ptr
+        }
     }
 
     pub fn get_mark(&self) -> u8 {
-        self.mark.load(Ordering::Relaxed)
+        unsafe {
+            (*self.mark).load(Ordering::Relaxed)
+        }
     }
 
     fn set_line(&self, line: usize, mark: u8) {
-        self.lines[line].store(mark.into(), Ordering::Relaxed)
+        unsafe {
+            (*self.lines.add(line)).store(mark.into(), Ordering::Relaxed)
+        }
     }
 
     fn free_block(&self) {
-        self.mark.store(FREE_MARK, Ordering::Relaxed)
+        unsafe {
+            (*self.mark).store(FREE_MARK, Ordering::Relaxed)
+        }
     }
 
     fn get_line(&self, index: usize) -> u8 {
-        self.lines[index].load(Ordering::Relaxed).into()
+        unsafe {
+            (*self.lines.add(index)).load(Ordering::Relaxed).into()
+        }
     }
 
     fn mark_block(&self, mark: NonZero<u8>) {
-        self.mark.store(mark.into(), Ordering::Relaxed);
+        unsafe {
+            (*self.mark).store(mark.into(), Ordering::Relaxed);
+        }
+    }
+}
+
+unsafe impl Send for Block {}
+unsafe impl Sync for Block {}
+
+impl Drop for Block {
+    fn drop(&mut self) {
+        unsafe {
+            let layout = Layout::from_size_align(BLOCK_SIZE, BLOCK_SIZE).unwrap();
+            alloc::alloc::dealloc(self.mark as *mut u8, layout);
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::constants::BLOCK_SIZE;
+    use crate::constants::BLOCK_CAPACITY;
 
     use super::*;
-
-    #[test]
-    fn size_of_block() {
-        assert_eq!(core::mem::size_of::<Block>(), BLOCK_SIZE);
-    }
 
     #[test]
     fn new_block_is_reset() {
@@ -301,5 +359,55 @@ mod tests {
         for i in 0..LINE_COUNT {
             assert_eq!(block.get_line(i), FREE_MARK);
         }
+    }
+
+    #[test]
+    fn from_ptr_retrieves_correct_block() {
+        // This test verifies that from_ptr can correctly reconstruct a block reference
+        // from any pointer within the block's data region
+        let block = Block::alloc().unwrap();
+
+        // Mark the block with a unique mark
+        let test_mark = NonZero::new(42).unwrap();
+        block.mark_block(test_mark);
+
+        // Get pointers at different offsets within the data region
+        let ptr_at_start = block.get_data_ptr(0);
+        let ptr_at_middle = block.get_data_ptr(BLOCK_CAPACITY / 2);
+        let ptr_at_near_end = block.get_data_ptr(BLOCK_CAPACITY - 1);
+
+        unsafe {
+            // from_ptr should be able to reconstruct the block from any of these pointers
+            let block_from_start = Block::from_ptr(ptr_at_start);
+            let block_from_middle = Block::from_ptr(ptr_at_middle);
+            let block_from_end = Block::from_ptr(ptr_at_near_end);
+
+            // All reconstructed blocks should have the same mark we set
+            assert_eq!(block_from_start.get_mark(), 42, "from_ptr failed for pointer at start");
+            assert_eq!(block_from_middle.get_mark(), 42, "from_ptr failed for pointer at middle");
+            assert_eq!(block_from_end.get_mark(), 42, "from_ptr failed for pointer at end");
+        }
+    }
+
+    #[test]
+    fn from_ptr_marks_correctly() {
+        // This test verifies that marking through from_ptr works correctly
+        let block = Block::alloc().unwrap();
+
+        // Allocate at a specific offset
+        let offset = LINE_SIZE * 5;
+        let ptr = block.get_data_ptr(offset);
+        let layout = Layout::from_size_align(LINE_SIZE, 8).unwrap();
+        let mark = NonZero::new(7).unwrap();
+
+        unsafe {
+            // Mark the allocation using the static mark function
+            Block::mark(ptr, layout, SizeClass::Small, mark);
+        }
+
+        // Verify the line was marked correctly
+        let line = offset / LINE_SIZE;
+        assert_eq!(block.get_line(line), 7, "Line was not marked correctly");
+        assert_eq!(block.get_mark(), 7, "Block was not marked correctly");
     }
 }

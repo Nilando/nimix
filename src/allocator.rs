@@ -5,7 +5,6 @@ use super::size_class::SizeClass;
 use alloc::alloc::Layout;
 use core::cell::Cell;
 use alloc::sync::Arc;
-use core::num::NonZero;
 
 pub struct Allocator {
     head: Cell<Option<BumpBlock>>,
@@ -29,13 +28,29 @@ impl Allocator {
     }
 
     pub unsafe fn alloc(&self, layout: Layout) -> Result<*const u8, AllocError> {
+        // Debug: validate layout parameters
+        assert!(layout.size() > 0, "alloc: size must be > 0");
+
         let size_class = SizeClass::get_for_size(layout.size())?;
 
-        match size_class {
+        let ptr = match size_class {
             SizeClass::Small => self.small_alloc(layout),
             SizeClass::Medium => self.medium_alloc(layout),
             SizeClass::Large => self.store.create_large(layout),
-        }
+        }?;
+
+        // Debug: validate returned pointer
+        debug_assert!(!ptr.is_null(), "alloc: returned null pointer");
+        debug_assert_eq!(
+            ptr as usize % layout.align(),
+            0,
+            "alloc: returned pointer {:p} is not aligned to {} (offset: {})",
+            ptr,
+            layout.align(),
+            ptr as usize % layout.align()
+        );
+
+        Ok(ptr)
     }
 
     fn small_alloc(&self, layout: Layout) -> Result<*const u8, AllocError> {
@@ -87,7 +102,7 @@ impl Allocator {
         Ok(())
     }
 
-    fn head_alloc(&self, layout: Layout) -> Option<*const u8> {
+    fn head_alloc(&self, layout: Layout) -> Option<*mut u8> {
         match self.head.take() {
             Some(mut head) => {
                 let result = head.inner_alloc(layout);
@@ -98,7 +113,7 @@ impl Allocator {
         }
     }
 
-    fn overflow_alloc(&self, layout: Layout) -> Option<*const u8> {
+    fn overflow_alloc(&self, layout: Layout) -> Option<*mut u8> {
         match self.overflow.take() {
             Some(mut overflow) => {
                 let result = overflow.inner_alloc(layout);
