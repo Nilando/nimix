@@ -13,6 +13,12 @@ pub struct Heap {
     store: Arc<BlockStore>,
 }
 
+impl Default for Heap {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Heap {
     pub fn new() -> Self {
         let store = Arc::new(BlockStore::new());
@@ -27,6 +33,6 @@ impl Heap {
     }
 
     pub unsafe fn sweep(&self, live_mark: NonZero<u8>) {
-        self.store.sweep(live_mark.into());
+        self.store.sweep(live_mark);
     }
 }

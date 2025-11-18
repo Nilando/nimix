@@ -114,7 +114,7 @@ impl Block {
             block.set_line(line, mark.into());
         } else {
             let size = layout.size();
-            let relative_end = (idx + size as usize) - 1;
+            let relative_end = (idx + size) - 1;
             let end_line = relative_end / LINE_SIZE;
 
             for i in line..end_line {
@@ -176,7 +176,7 @@ impl Block {
 
     fn set_line(&self, line: usize, mark: u8) {
         unsafe {
-            (*self.lines.add(line)).store(mark.into(), Ordering::Relaxed)
+            (*self.lines.add(line)).store(mark, Ordering::Relaxed)
         }
     }
 
@@ -188,7 +188,7 @@ impl Block {
 
     fn get_line(&self, index: usize) -> u8 {
         unsafe {
-            (*self.lines.add(index)).load(Ordering::Relaxed).into()
+            (*self.lines.add(index)).load(Ordering::Relaxed)
         }
     }
 

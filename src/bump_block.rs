@@ -65,7 +65,7 @@ impl BumpBlock {
 
                 let ptr = self.block.get_data_ptr(self.cursor);
 
-                return Some(ptr as *mut u8);
+                return Some(ptr);
             }
 
             if let Some((cursor, limit)) = self.block

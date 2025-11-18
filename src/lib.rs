@@ -29,10 +29,10 @@ pub unsafe fn mark(ptr: *const u8, layout: Layout, mark: NonZero<u8>) -> Result<
     let size_class =  SizeClass::get_for_size(layout.size())?;
 
     if size_class != SizeClass::Large {
-        Block::mark(ptr, layout, size_class, mark.into());
+        Block::mark(ptr, layout, size_class, mark);
 
         Ok(())
     } else {
-        LargeBlock::mark(ptr, layout, mark.into())
+        LargeBlock::mark(ptr, layout, mark)
     }
 }
